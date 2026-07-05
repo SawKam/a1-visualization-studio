@@ -106,8 +106,10 @@ async function generateWithOpenAI(body) {
   form.append('prompt', fullPrompt);
   form.append('size', process.env.OPENAI_IMAGE_SIZE || '1536x1024');
   form.append('quality', process.env.OPENAI_IMAGE_QUALITY || 'medium');
-  appendImage(form, 'image', originalImage, 'site-photo.jpg');
-  references.slice(0, 3).forEach((ref, index) => appendImage(form, 'image', ref.image, `reference-${index + 1}.png`));
+  // OpenAI expects multiple input images to be sent using array syntax.
+  // If we append repeated 'image' fields, the API returns: Duplicate parameter: 'image'.
+  appendImage(form, 'image[]', originalImage, 'site-photo.jpg');
+  references.slice(0, 3).forEach((ref, index) => appendImage(form, 'image[]', ref.image, `reference-${index + 1}.png`));
 
   const response = await fetch('https://api.openai.com/v1/images/edits', {
     method: 'POST',

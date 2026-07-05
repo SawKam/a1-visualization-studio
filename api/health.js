@@ -31,7 +31,7 @@ export default function handler(req, res) {
   res.status(200).json({
     ok: true,
     service: 'a1-visualization-studio-api',
-    version: 'v0.6.1-simple-reference-compressed',
+    version: 'v0.6.2-simple-reference-compressed',
     providers: providersStatus(),
   });
 }
