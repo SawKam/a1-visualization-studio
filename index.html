@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>A-1 Visualization Studio — v0.5.3</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-block">
+        <div class="eyebrow">Deployable UI direction · Multi-provider API Trial v0.5.3</div>
+        <h1>A-1 Visualization Studio</h1>
+        <p>Guided customer visualizer with hidden admin-managed library for fence systems and Meshable outdoor furniture.</p>
+      </div>
+      <div class="top-actions">
+        <button id="customerModeBtn" class="mode-btn active">Customer Studio</button>
+        <button id="adminModeBtn" class="mode-btn">Admin Library</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="customerView" class="view-section">
+        <section class="hero-grid">
+          <article class="card upload-card">
+            <div class="card-head">
+              <span class="step-chip">01</span>
+              <div>
+                <h2>Upload site image</h2>
+                <p>Upload the customer's factory, bungalow, terrace, landscape, or compound photo.</p>
+              </div>
+            </div>
+
+            <label class="dropzone" id="siteDropzone">
+              <input id="siteInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+              <div id="siteEmpty" class="drop-empty">
+                <span class="drop-icon">＋</span>
+                <strong>Upload property / site photo</strong>
+                <small>JPEG, PNG, WEBP</small>
+              </div>
+              <div id="sitePreviewWrap" class="upload-preview hidden">
+                <img id="sitePreview" alt="Site preview" />
+                <div class="upload-footer">
+                  <span id="siteFileName">site.jpg</span>
+                  <button type="button" id="removeSiteBtn">Remove</button>
+                </div>
+              </div>
+            </label>
+          </article>
+
+          <article class="card selector-card">
+            <div class="card-head">
+              <span class="step-chip">02</span>
+              <div>
+                <h2>Select what to visualize</h2>
+                <p>Customers only see approved choices. The hidden reference library remains in admin mode.</p>
+              </div>
+            </div>
+
+            <div class="selector-layout">
+              <div class="selector-left">
+                <div class="family-toggle">
+                  <button id="familyFenceBtn" class="family-btn active" data-family="fence">Fence / Perimeter</button>
+                  <button id="familyFurnitureBtn" class="family-btn" data-family="furniture">Meshable Furniture</button>
+                </div>
+
+                <div class="option-grid">
+                  <label>
+                    Category / Type
+                    <select id="typeSelect"></select>
+                  </label>
+                  <label>
+                    Product / Design
+                    <select id="productSelect"></select>
+                  </label>
+                  <label>
+                    Color / Finish
+                    <select id="colorSelect"></select>
+                  </label>
+                  <label id="heightFieldWrap">
+                    Height
+                    <select id="heightSelect"></select>
+                  </label>
+                  <label id="ctcFieldWrap">
+                    Post CTC
+                    <select id="ctcSelect"></select>
+                  </label>
+                  <label id="topFieldWrap">
+                    Top Option
+                    <select id="topOptionSelect"></select>
+                  </label>
+                  <label id="setsFieldWrap" class="hidden">
+                    Number of sets
+                    <select id="setsCountSelect">
+                      <option value="1">1 set</option>
+                      <option value="2">2 sets</option>
+                      <option value="3">3 sets</option>
+                      <option value="4">4 sets</option>
+                      <option value="5">5 sets</option>
+                      <option value="6">6 sets</option>
+                    </select>
+                  </label>
+                  <label id="furnitureScaleWrap" class="hidden range-field">
+                    Furniture scale
+                    <input id="furnitureScale" type="range" min="35" max="155" value="76" />
+                    <span class="range-value"><span id="furnitureScaleValue">76</span>%</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="selector-right">
+                <div class="preview-mini-card">
+                  <div class="preview-mini-head">
+                    <span>Selected reference</span>
+                    <strong id="selectedProductBadge">No product selected</strong>
+                  </div>
+                  <div class="preview-mini-box">
+                    <img id="referencePreview" alt="Selected reference preview" />
+                    <div id="referenceEmpty" class="reference-empty">Approved reference preview will appear here.</div>
+                  </div>
+                  <p id="previewMeta" class="preview-meta">Preview visible to the customer. Full database remains hidden.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="card intent-card">
+          <div class="section-title-row">
+            <div>
+              <div class="eyebrow small">Step 03</div>
+              <h2>Intent, prompt, and placement control</h2>
+              <p>Choose a quick visualization intent, add optional instructions, or open manual placement tools.</p>
+            </div>
+            <div class="mini-status" id="manualStatus">Manual placement: using automatic defaults</div>
+          </div>
+
+          <div class="intent-grid">
+            <div class="intent-block">
+              <div class="subhead">Preset intent buttons</div>
+              <div id="promptPresets" class="preset-grid"></div>
+            </div>
+
+            <div class="intent-block prompt-block">
+              <div class="subhead">Optional prompt by user</div>
+              <textarea id="customPrompt" placeholder="Write an optional instruction, e.g. keep the fence only on the visible road side, or arrange 3 café sets near the far-right corner."></textarea>
+              <div class="subhead generated">Generated instruction for AI image API</div>
+              <textarea id="generatedPrompt" readonly></textarea>
+            </div>
+          </div>
+
+          <div class="manual-actions-row">
+            <button id="openFenceDesignerBtn" class="soft-btn">Let me draw the fence line myself</button>
+            <button id="openFurnitureDesignerBtn" class="soft-btn">Let me place furniture manually</button>
+          </div>
+        </section>
+
+        <section class="card generate-card">
+          <div class="section-title-row">
+            <div>
+              <div class="eyebrow small">Step 04</div>
+              <h2>Generate, compare, and download</h2>
+              <p>Generate a controlled local concept preview first. This same structure can later be sent to a real AI image API.</p>
+            </div>
+            <div class="result-toggle">
+              <button id="sideBySideBtn" class="toggle-btn active">Side by side</button>
+              <button id="resultOnlyBtn" class="toggle-btn">Result only</button>
+            </div>
+          </div>
+
+          <div class="generate-toolbar">
+            <button id="generateBtn" class="secondary-btn">Generate local preview</button>
+            <button id="generateAiBtn" class="primary-btn">Generate AI refinement</button>
+            <button id="downloadBtn" class="secondary-btn" disabled>Download final</button>
+            <span id="generateStatus" class="generate-status">Awaiting site image and product selection.</span>
+          </div>
+
+          <div class="provider-panel">
+            <div class="provider-panel-head">
+              <div>
+                <div class="subhead">v0.5.2 multi-provider API trial</div>
+                <p>Switch providers without rebuilding the UI. Use local preview only, or test public / paid providers through the same backend contract.</p>
+              </div>
+              <div id="providerTestStatus" class="mini-status">Select a provider and test connection.</div>
+            </div>
+            <div class="provider-grid">
+              <label>
+                AI provider
+                <select id="providerSelect">
+                  <option value="local-preview">Local preview only</option>
+                  <option value="pollinations">Pollinations (free trial style)</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="stability">Stability AI (scaffold)</option>
+                  <option value="replicate">Replicate (scaffold)</option>
+                  <option value="huggingface">Hugging Face (scaffold)</option>
+                </select>
+              </label>
+              <div class="provider-actions">
+                <button id="testApiBtn" class="secondary-btn" type="button">Test API connection</button>
+                <button id="refreshProviderBtn" class="ghost-btn" type="button">Refresh provider status</button>
+              </div>
+            </div>
+            <div id="providerBadges" class="provider-badges"></div>
+            <div id="providerHelp" class="api-note">Local preview only uses no external API credits. Choose another provider to try an actual server-side image call.</div>
+          </div>
+
+          <div id="resultSection" class="result-area hidden">
+            <div id="resultGrid" class="result-grid">
+              <div class="result-card original-card">
+                <span>Before</span>
+                <canvas id="originalCanvas" width="1500" height="820"></canvas>
+              </div>
+              <div class="result-card">
+                <span>After</span>
+                <canvas id="resultCanvas" width="1500" height="820"></canvas>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section id="adminView" class="view-section hidden">
+        <div class="admin-layout">
+          <article class="card admin-form-card">
+            <div class="section-title-row tight">
+              <div>
+                <div class="eyebrow small">Admin Panel</div>
+                <h2>Library builder</h2>
+                <p>Create the hidden reference library and option sets that customers will use through simple dropdowns.</p>
+              </div>
+            </div>
+
+            <form id="libraryForm" class="admin-form">
+              <input id="editingProductId" type="hidden" />
+              <div class="option-grid admin-grid">
+                <label>
+                  Library type
+                  <select id="adminCategory">
+                    <option value="fence">Fence</option>
+                    <option value="furniture">Meshable Outdoor Furniture</option>
+                  </select>
+                </label>
+                <label>
+                  Category / Type
+                  <input id="adminType" type="text" placeholder="Aesthetic Fence, 358, Café Chair" required />
+                </label>
+                <label class="full-span">
+                  Product name
+                  <input id="adminName" type="text" placeholder="Aesthetic Fence — Tree Motif" required />
+                </label>
+                <label>
+                  Colors / finishes
+                  <input id="adminColors" type="text" placeholder="A-1 Green, Graphite Black, White" />
+                </label>
+                <label class="fence-only-admin">
+                  Heights
+                  <input id="adminHeights" type="text" placeholder="1.8 m, 2.4 m, 3.0 m" />
+                </label>
+                <label class="fence-only-admin">
+                  Post CTC options
+                  <input id="adminCtc" type="text" placeholder="2.0 m, 2.5 m, 3.0 m" />
+                </label>
+                <label class="fence-only-admin">
+                  Top options
+                  <input id="adminTopOptions" type="text" placeholder="None, Y-arm, Concertina" />
+                </label>
+                <label>
+                  Front / clean reference
+                  <input id="adminReferenceImage" type="file" accept="image/jpeg,image/png,image/webp" />
+                </label>
+                <label>
+                  Side view
+                  <input id="adminSideImage" type="file" accept="image/jpeg,image/png,image/webp" />
+                </label>
+                <label>
+                  Top view
+                  <input id="adminTopImage" type="file" accept="image/jpeg,image/png,image/webp" />
+                </label>
+                <label>
+                  Perspective view
+                  <input id="adminPerspectiveImage" type="file" accept="image/jpeg,image/png,image/webp" />
+                </label>
+                <label>
+                  Lifestyle / installed view
+                  <input id="adminSiteImage" type="file" accept="image/jpeg,image/png,image/webp" />
+                </label>
+                <label class="full-span">
+                  Admin notes / AI guidance
+                  <textarea id="adminNotes" placeholder="Describe geometry, finish, motif details, scale cues, and what the AI should preserve."></textarea>
+                </label>
+              </div>
+              <div class="admin-actions">
+                <button type="submit" class="primary-btn">Save product</button>
+                <button type="button" id="newProductBtn" class="secondary-btn">New</button>
+                <button type="button" id="exportLibraryBtn" class="secondary-btn">Export JSON</button>
+                <label class="secondary-btn import-btn">Import JSON<input id="importLibraryInput" type="file" accept="application/json" hidden /></label>
+                <button type="button" id="resetLibraryBtn" class="ghost-btn">Reset seed</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="card admin-list-card">
+            <div class="section-title-row tight">
+              <div>
+                <div class="eyebrow small">Hidden Database</div>
+                <h2>Products in library</h2>
+                <p>The customer will not see this table — only filtered dropdowns and a small approved preview image.</p>
+              </div>
+              <div class="admin-filter-row">
+                <button class="library-filter active" data-filter="all">All</button>
+                <button class="library-filter" data-filter="fence">Fence</button>
+                <button class="library-filter" data-filter="furniture">Furniture</button>
+              </div>
+            </div>
+            <div id="adminLibraryList" class="library-list"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="designerModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal="true"></div>
+    <div class="modal-dialog large">
+      <div class="modal-header">
+        <div>
+          <div class="eyebrow small" id="designerEyebrow">Manual Placement</div>
+          <h2 id="designerTitle">Fence line & perspective editor</h2>
+          <p id="designerDescription">Draw and adjust placement on the uploaded site image.</p>
+        </div>
+        <button id="closeDesignerBtn" class="icon-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="designer-main">
+          <div class="designer-canvas-wrap">
+            <canvas id="designerCanvas" width="1600" height="920"></canvas>
+            <div id="designerEmpty" class="canvas-empty">Upload a site image first.</div>
+          </div>
+          <aside class="designer-sidebar">
+            <div id="fenceDesignerControls">
+              <div class="subhead">Fence controls</div>
+              <div class="toolbar-row">
+                <button id="autoPathBtn" class="secondary-btn">Auto Path</button>
+                <button id="drawPathBtn" class="secondary-btn">Draw</button>
+                <button id="editPathBtn" class="secondary-btn active">Edit</button>
+                <button id="clearPathBtn" class="ghost-btn">Clear</button>
+              </div>
+              <div class="field-stack">
+                <label>
+                  Perspective mode
+                  <select id="perspectiveMode">
+                    <option value="one">1-point</option>
+                    <option value="two" selected>2-point</option>
+                    <option value="three">3-point</option>
+                  </select>
+                </label>
+                <label>
+                  Right vanishing point
+                  <input id="vpRight" type="range" min="-250" max="350" value="180" />
+                  <span class="range-value"><span id="vpRightValue">180</span>%</span>
+                </label>
+                <label>
+                  Left vanishing point
+                  <input id="vpLeft" type="range" min="-250" max="350" value="-120" />
+                  <span class="range-value"><span id="vpLeftValue">-120</span>%</span>
+                </label>
+                <label>
+                  Horizon height
+                  <input id="horizon" type="range" min="-25" max="120" value="44" />
+                  <span class="range-value"><span id="horizonValue">44</span>%</span>
+                </label>
+                <label>
+                  Fence visual height
+                  <input id="fenceVisualHeight" type="range" min="70" max="260" value="150" />
+                  <span class="range-value"><span id="fenceVisualHeightValue">150</span>px</span>
+                </label>
+                <label class="check-row"><input id="showGuides" type="checkbox" checked /> Show perspective guides</label>
+                <label class="check-row"><input id="addShadow" type="checkbox" checked /> Add subtle ground shadow</label>
+              </div>
+            </div>
+
+            <div id="furnitureDesignerControls" class="hidden">
+              <div class="subhead">Furniture controls</div>
+              <p class="helper-text">Set the number of furniture sets on the main screen, then drag the placement dots here. Scale can also be adjusted.</p>
+              <div class="field-stack">
+                <label>
+                  Furniture scale
+                  <input id="modalFurnitureScale" type="range" min="35" max="155" value="76" />
+                  <span class="range-value"><span id="modalFurnitureScaleValue">76</span>%</span>
+                </label>
+                <button id="resetFurnitureDotsBtn" class="secondary-btn">Reset placement dots</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span id="designerFooterStatus">No manual placement saved yet.</span>
+        <div class="toolbar-row">
+          <button id="saveDesignerBtn" class="primary-btn">Save placement</button>
+          <button id="closeDesignerFooterBtn" class="secondary-btn">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
