@@ -277,15 +277,15 @@ const PROVIDER_INFO = {
   },
   stability: {
     label: 'Stability AI',
-    help: 'Scaffolded in v0.5.2. The provider can be selected and tested, but final image generation endpoint/model mapping still needs to be completed.',
+    help: 'Connected in v0.5.4 using Stability AI Stable Image Control Structure. It uses the local concept preview as a structure guide, so it should preserve placement better than free text-to-image routes, but it may still reinterpret the scene.',
   },
   replicate: {
     label: 'Replicate',
-    help: 'Scaffolded in v0.5.2. Use this option to prepare deployment wiring and token storage before final model selection.',
+    help: 'Scaffolded. Token detection and provider selection are ready; final generation endpoint/model mapping still needs to be implemented.',
   },
   huggingface: {
     label: 'Hugging Face',
-    help: 'Scaffolded in v0.5.2. Good for future open-source model trials once a specific inference provider/model is chosen.',
+    help: 'Scaffolded. Good for future open-source model trials once a specific inference provider/model is chosen.',
   },
 };
 
@@ -1101,7 +1101,7 @@ function renderProviderBadges(health) {
     const className = ready ? 'ready' : configured ? 'partial' : 'offline';
     const label = PROVIDER_INFO[key]?.label || key;
     const hint = item.message || (ready ? 'ready' : configured ? 'configured' : 'not configured');
-    return `<div class="provider-badge ${className}" title="${hint.replace(/"/g,'&quot;')}"><span class="dot"></span><strong>${label}</strong><span>· ${ready ? 'ready' : configured ? 'trial / scaffold' : 'offline'}</span></div>`;
+    return `<div class="provider-badge ${className}" title="${hint.replace(/"/g,'&quot;')}"><span class="dot"></span><strong>${label}</strong><span>· ${ready ? 'ready' : configured ? 'configured / scaffold' : 'offline'}</span></div>`;
   }).join('');
 }
 
