@@ -39,7 +39,7 @@ export default function handler(req, res) {
   res.status(200).json({
     ok: true,
     service: 'a1-visualization-studio-api',
-    version: 'v0.5.6',
+    version: 'v0.5.7',
     providers: providersStatus(),
   });
 }

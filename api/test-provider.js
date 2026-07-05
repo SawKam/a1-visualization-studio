@@ -35,7 +35,7 @@ async function testStabilityKey() {
       ok: true,
       provider: 'stability',
       ready: true,
-      message: 'Stability key validated. Guide-lock inpaint workflow is wired in v0.5.6.',
+      message: 'Stability key validated. Product-reference lock workflow is wired in v0.5.7.',
       balance: data?.credits ?? data?.balance ?? data,
     },
   };

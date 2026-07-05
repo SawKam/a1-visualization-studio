@@ -1,76 +1,71 @@
-# A-1 Visualization Studio v0.5.6 — Stability Guide-Lock Trial
+# A-1 Visualization Studio v0.5.7 — Product Reference Lock Trial
 
-This build responds to the v0.5.5 issue where Stability preserved the site better, but still ignored the locally generated fence/furniture reference and sometimes generated the wrong product style.
+This build fixes the root issue observed in v0.5.6: the local preview and fence-line editor were still not giving enough priority to the selected product reference from the database.
 
-## What changed in v0.5.6
+## What was wrong before
 
-### Stability now uses a guide-lock workflow
-Instead of sending only the original site image as the Stability base image, the app now sends a **clean local concept guide** as the base image.
+### 1. The app was using the correct selected product, but the local renderer was generic
+The selected Aesthetic Fence product was present in the database, but the renderer still drew a generic mesh/rail system on top of every fence. This made aesthetic fence products look like a plain mesh fence in the pop-up, local preview, and AI guide image.
 
-That clean guide is made from the local preview but removes the UI label before sending it to Stability.
+### 2. Large aesthetic reference images were being squeezed into tiny post-to-post bays
+The aesthetic tree / peacock PNGs are full product strip references. The old rendering logic attempted to draw the full reference inside every small post interval, so the motif became too compressed or invisible.
 
-### Local reference is locked back onto the result
-After the Stability result returns, the app redraws the selected local fence/furniture guide over the AI output.
+### 3. Image loading was asynchronous
+The local preview could be captured for the AI payload before the reference PNG had finished painting onto the canvas.
 
-This prevents the final preview from drifting into unrelated outputs such as:
-- wooden fence
-- solid privacy fence
-- ranch fence
-- wrong product design
-- wrong color
+### 4. Browser storage kept older libraries
+Earlier versions used the same browser local-storage key, so older local libraries could remain active after deployment and hide newer seed-library fixes.
 
-### Stability still uses inpaint
-The Stability provider still uses:
+## What changed in v0.5.7
 
-```text
-/v2beta/stable-image/edit/inpaint
-```
+### Product-reference-first local renderer
+- If a fence product has a reference image, the app now draws that image as a **full perspective product strip** along the selected fence path.
+- The generic mesh renderer is now only a fallback when no product reference image exists.
+- Aesthetic tree / peacock references should now be visible in:
+  - manual fence editor pop-up
+  - local preview
+  - Stability AI guide image
+  - final guide-lock overlay
 
-But now the base image is the clean local concept, not only the original site photo.
+### Image preloading before preview generation
+- The app now waits for the selected product reference image to load before generating the preview.
+- This prevents the AI payload from being captured before the local reference image appears.
 
-## Why this version is needed
+### New storage key
+- Browser library storage now uses a v0.5.7 key.
+- This forces the updated seed product library to load fresh during testing.
 
-v0.5.4 used Control Structure and changed the whole scene.
-v0.5.5 used original-photo inpaint and preserved the scene, but ignored the local fence reference.
-v0.5.6 combines both ideas:
+### Stability guide-lock retained
+- Stability still uses the clean local guide image as the base image.
+- After Stability returns, the selected local product reference is locked back on top of the result.
 
-1. use the local preview as the base visual guide
-2. use masking to constrain the edit region
-3. lock the selected product overlay back onto the final result
-
-## Required Vercel environment variables
+## Required Vercel environment variable
 
 ```env
 STABILITY_API_KEY=your_stability_api_key_here
-STABILITY_MODE=edit-inpaint
-STABILITY_OUTPUT_FORMAT=png
 ```
 
-Recommended negative prompt:
+## Recommended environment variables
 
 ```env
+DEFAULT_AI_PROVIDER=stability
+STABILITY_MODE=edit-inpaint
+STABILITY_OUTPUT_FORMAT=png
 STABILITY_NEGATIVE_PROMPT=people, cars, text, watermark, logo, deformed fence, wrong building, distorted architecture, unrealistic shadows, extra products, extra landscaping, wooden fence, timber fence, brown fence, solid privacy fence, ranch fence, different product design
 ```
 
-## How to test
+## How to test this fix
 
-1. Upload site image.
-2. Select fence/furniture product.
-3. Generate local preview and check that the local preview is correct.
-4. Choose **Stability AI (guide-lock / inpaint)**.
-5. Click **Test API connection**.
-6. Click **Generate AI refinement**.
+1. Deploy v0.5.7.
+2. Hard refresh the deployed app.
+3. Select **Aesthetic Fence — Tree Motif**.
+4. Open **Let me draw the fence line myself**.
+5. The aesthetic reference should now appear in the editor overlay.
+6. Save placement.
+7. Click **Generate local preview**.
+8. Confirm the aesthetic reference appears before testing Stability.
+9. Select **Stability AI** and click **Generate AI refinement**.
 
-## Expected result
+## Important note
 
-The final result should stay much closer to the locally generated preview. It may still need realism improvements, but it should no longer completely replace the selected fence with an unrelated wooden or solid fence.
-
-## Files changed
-
-- `app.js`
-- `api/generate-image.js`
-- `api/health.js`
-- `api/test-provider.js`
-- `index.html`
-- `.env.example`
-- `README.md`
+The first pass to judge is no longer the Stability result. First check whether the **local preview itself** shows the selected database image. If the local preview is correct, the AI guide image will also be correct.

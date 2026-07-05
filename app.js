@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'a1_visualization_studio_library_v053';
+const STORAGE_KEY = 'a1_visualization_studio_library_v057';
 
 function svgDataUri(svg) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
@@ -262,6 +262,39 @@ const originalCtx = el.originalCanvas.getContext('2d');
 const resultCtx = el.resultCanvas.getContext('2d');
 const designerCtx = el.designerCanvas.getContext('2d');
 
+const IMAGE_PROMISES = new Map();
+const IMAGE_STORE = new Map();
+
+function isImageReference(src) {
+  return Boolean(src && (String(src).startsWith('data:image/') || String(src).startsWith('assets/') || /^https?:\/\//.test(String(src))));
+}
+
+function loadImageCached(src) {
+  if (!isImageReference(src)) return Promise.resolve(null);
+  if (IMAGE_STORE.has(src)) return Promise.resolve(IMAGE_STORE.get(src));
+  if (IMAGE_PROMISES.has(src)) return IMAGE_PROMISES.get(src);
+  const promise = new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      IMAGE_STORE.set(src, img);
+      resolve(img);
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+  IMAGE_PROMISES.set(src, promise);
+  return promise;
+}
+
+async function ensureSelectedReferenceReady(product = getSelectedProduct()) {
+  const refs = product ? [product.referenceImage, product.perspectiveImage, product.siteImage, product.sideImage, product.topImage] : [];
+  await Promise.all(refs.filter(isImageReference).map(loadImageCached));
+}
+
+function getCachedImageNow(src) {
+  return IMAGE_STORE.get(src) || null;
+}
+
 const PROVIDER_INFO = {
   'local-preview': {
     label: 'Local preview only',
@@ -277,7 +310,7 @@ const PROVIDER_INFO = {
   },
   stability: {
     label: 'Stability AI',
-    help: 'Connected in v0.5.6 using Stability AI guide-lock workflow. The clean local preview is used as the Stability base image, and after the API returns the selected product overlay is locked back on top so the final view respects the locally generated fence/furniture reference.',
+    help: 'Connected in v0.5.7 using the product-reference lock workflow. Local previews now wait for selected database reference images to load, and aesthetic fence references are drawn as full product strips instead of being replaced by the generic mesh overlay.',
   },
   replicate: {
     label: 'Replicate',
@@ -827,13 +860,22 @@ function colorNameToHex(name) {
   return '#2f5f46';
 }
 
+function isAestheticFence(product) {
+  return String(product?.type || product?.name || '').toLowerCase().includes('aesthetic');
+}
+
 function drawFenceGuidedOverlay(context, path, product, color, data) {
   const posts = samplePosts(path, el.ctcSelect.value, data);
   const rails = samplePath(path, 80);
   if (el.addShadow.checked) drawGroundShadow(context, rails, data);
   const referenceImage = getReferenceImage(product);
-  if (referenceImage) drawReferencePanels(context, posts, referenceImage, data, color, path, product);
-  drawFenceRailsAndMesh(context, rails, data, color, product?.type || 'Fence');
+  const drewReference = referenceImage ? drawReferencePanels(context, posts, referenceImage, data, color, path, product) : false;
+
+  // Critical v0.5.7 change:
+  // If a product reference exists, the local renderer must respect it first.
+  // The old build drew a generic mesh overlay on top of every product, which made
+  // aesthetic fences look like plain 358-style mesh. Generic mesh is now only a fallback.
+  if (!drewReference) drawFenceRailsAndMesh(context, rails, data, color, product?.type || 'Fence');
   drawPosts(context, posts, data, color);
 }
 
@@ -856,48 +898,68 @@ function drawGroundShadow(context, rails, data) {
 
 function shouldTintReferenceImage(product, src) {
   if (!product) return false;
-  // For the MVP local preview, all fence references are treated as colorable product masks.
-  // This makes dropdown colors visible before AI integration and also produces a better
-  // control image for the API. Real photo references can still be stored as site/perspective views.
   return product.category === 'fence';
 }
 
+function tintDrawnPixels(context, width, height, color) {
+  context.globalCompositeOperation = 'source-in';
+  context.fillStyle = color;
+  context.globalAlpha = 0.92;
+  context.fillRect(0, 0, width, height);
+  context.globalCompositeOperation = 'source-over';
+  context.globalAlpha = 1;
+}
+
+function buildFenceClip(context, path, data) {
+  const rails = samplePath(path, 80);
+  if (rails.length < 2) return null;
+  const topRail = rails.map(point => getVerticalTop(point, getPostHeightAt(point, data) * 0.98, data));
+  context.beginPath();
+  rails.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
+  [...topRail].reverse().forEach(point => context.lineTo(point.x, point.y));
+  context.closePath();
+  return { rails, topRail };
+}
+
+function drawReferenceStrip(context, img, data, color, path, product) {
+  const shape = buildFenceClip(context, path, data);
+  if (!shape) return false;
+  const rails = shape.rails;
+  const first = rails[0];
+  const last = rails[rails.length - 1];
+  const firstTop = getVerticalTop(first, getPostHeightAt(first, data) * 0.98, data);
+  const lastTop = getVerticalTop(last, getPostHeightAt(last, data) * 0.98, data);
+  const width = Math.max(80, Math.hypot(lastTop.x - firstTop.x, lastTop.y - firstTop.y));
+  const height = Math.max(40, (Math.hypot(first.x - firstTop.x, first.y - firstTop.y) + Math.hypot(last.x - lastTop.x, last.y - lastTop.y)) / 2);
+
+  context.save();
+  buildFenceClip(context, path, data);
+  context.clip();
+  const aM = (lastTop.x - firstTop.x) / width;
+  const bM = (lastTop.y - firstTop.y) / width;
+  const cM = (first.x - firstTop.x) / height;
+  const dM = (first.y - firstTop.y) / height;
+  context.setTransform(aM, bM, cM, dM, firstTop.x, firstTop.y);
+  context.globalAlpha = isAestheticFence(product) ? 0.98 : 0.90;
+  context.drawImage(img, 0, 0, width, height);
+  if (shouldTintReferenceImage(product, img.src)) tintDrawnPixels(context, width, height, color);
+  context.restore();
+  return true;
+}
+
 function drawReferencePanels(context, posts, src, data, color, path, product) {
-  if (posts.length < 2) return;
-  const img = new Image();
-  img.onload = () => {
-    context.save();
-    context.globalAlpha = 0.88;
-    for (let i = 0; i < posts.length - 1; i++) {
-      const a = posts[i], b = posts[i+1];
-      const ah = getPostHeightAt(a, data), bh = getPostHeightAt(b, data);
-      const ta = getVerticalTop(a, ah, data), tb = getVerticalTop(b, bh, data);
-      const width = Math.max(20, Math.hypot(tb.x - ta.x, tb.y - ta.y));
-      const height = Math.max(20, (Math.hypot(a.x - ta.x, a.y - ta.y) + Math.hypot(b.x - tb.x, b.y - tb.y)) / 2);
-      context.save();
-      context.beginPath();
-      context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.lineTo(tb.x, tb.y); context.lineTo(ta.x, ta.y); context.closePath();
-      context.clip();
-      const aM = (tb.x - ta.x) / width;
-      const bM = (tb.y - ta.y) / width;
-      const cM = (a.x - ta.x) / height;
-      const dM = (a.y - ta.y) / height;
-      context.setTransform(aM, bM, cM, dM, ta.x, ta.y);
-      context.drawImage(img, 0, 0, width, height);
-      if (shouldTintReferenceImage(product, src)) {
-        context.globalCompositeOperation = 'source-atop';
-        context.fillStyle = color;
-        context.globalAlpha = 0.92;
-        context.fillRect(0, 0, width, height);
-        context.globalCompositeOperation = 'source-over';
-      }
-      context.restore();
-    }
-    context.restore();
-    drawFenceRailsAndMesh(context, samplePath(path, 80), data, color, product?.type || 'Fence');
-    drawPosts(context, posts, data, color);
-  };
-  img.src = src;
+  if (posts.length < 2) return false;
+  const img = getCachedImageNow(src);
+  if (!img) {
+    loadImageCached(src).then(() => {
+      if (context === designerCtx) drawDesignerCanvas();
+    });
+    return false;
+  }
+
+  // Product reference is now drawn as a full strip across the selected boundary.
+  // This preserves large decorative motifs such as the tree/peacock panels from the database.
+  return drawReferenceStrip(context, img, data, color, path, product);
 }
 
 function drawFenceRailsAndMesh(context, rails, data, color, type) {
@@ -1378,7 +1440,7 @@ async function generateAiRefinement() {
   const provider = getSelectedProvider();
 
   // Always generate the controlled local base first. This gives any provider a clear placement guide.
-  generateConcept();
+  await generateConcept();
   if (!state.resultReady) return;
   await waitForLocalPreviewPaint(provider === 'stability' ? 650 : 350);
 
@@ -1454,7 +1516,7 @@ async function generateAiRefinement() {
   }
 }
 
-function generateConcept() {
+async function generateConcept() {
   if (!state.siteImage) {
     alert('Upload a site image first.');
     return;
@@ -1464,6 +1526,7 @@ function generateConcept() {
     alert('Select a product first.');
     return;
   }
+  await ensureSelectedReferenceReady(product);
   const rectOriginal = drawBaseImage(originalCtx, el.originalCanvas, state.siteImage);
   const rectResult = drawBaseImage(resultCtx, el.resultCanvas, state.siteImage);
   if (!rectOriginal || !rectResult) return;
@@ -1496,7 +1559,7 @@ function generateConcept() {
 function downloadResult() {
   if (!state.resultReady) return;
   const a = document.createElement('a');
-  a.download = `a1-visualization-studio-v0-5-6-${new Date().toISOString().slice(0,19).replace(/[:T]/g, '-')}.png`;
+  a.download = `a1-visualization-studio-v0-5-7-${new Date().toISOString().slice(0,19).replace(/[:T]/g, '-')}.png`;
   a.href = el.resultCanvas.toDataURL('image/png');
   a.click();
 }
