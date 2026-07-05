@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'a1_visualization_studio_library_v057';
+const STORAGE_KEY = 'a1_visualization_studio_library_v058';
 
 function svgDataUri(svg) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
@@ -264,6 +264,7 @@ const designerCtx = el.designerCanvas.getContext('2d');
 
 const IMAGE_PROMISES = new Map();
 const IMAGE_STORE = new Map();
+const IMAGE_ALPHA_BOUNDS = new Map();
 
 function isImageReference(src) {
   return Boolean(src && (String(src).startsWith('data:image/') || String(src).startsWith('assets/') || /^https?:\/\//.test(String(src))));
@@ -310,7 +311,7 @@ const PROVIDER_INFO = {
   },
   stability: {
     label: 'Stability AI',
-    help: 'Connected in v0.5.7 using the product-reference lock workflow. Local previews now wait for selected database reference images to load, and aesthetic fence references are drawn as full product strips instead of being replaced by the generic mesh overlay.',
+    help: 'Connected in v0.5.8 using the database raster reference fix workflow. Local previews now wait for selected database reference images to load, and aesthetic fence references are drawn as full product strips instead of being replaced by the generic mesh overlay.',
   },
   replicate: {
     label: 'Replicate',
@@ -871,7 +872,7 @@ function drawFenceGuidedOverlay(context, path, product, color, data) {
   const referenceImage = getReferenceImage(product);
   const drewReference = referenceImage ? drawReferencePanels(context, posts, referenceImage, data, color, path, product) : false;
 
-  // Critical v0.5.7 change:
+  // Critical v0.5.8 change:
   // If a product reference exists, the local renderer must respect it first.
   // The old build drew a generic mesh overlay on top of every product, which made
   // aesthetic fences look like plain 358-style mesh. Generic mesh is now only a fallback.
@@ -898,7 +899,52 @@ function drawGroundShadow(context, rails, data) {
 
 function shouldTintReferenceImage(product, src) {
   if (!product) return false;
-  return product.category === 'fence';
+  const source = String(src || '').toLowerCase();
+  // Do not tint real PNG/JPEG database references. Tinting a raster reference was the
+  // reason aesthetic panels became a solid green rectangle in v0.5.8. Only tint the
+  // procedural SVG placeholders where the product is deliberately stored as a mask.
+  if (isAestheticFence(product)) return false;
+  return source.startsWith('data:image/svg') && product.category === 'fence';
+}
+
+function getImageAlphaBounds(img, src) {
+  if (!img) return null;
+  if (IMAGE_ALPHA_BOUNDS.has(src)) return IMAGE_ALPHA_BOUNDS.get(src);
+  let bounds = null;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let minX = width, minY = height, maxX = -1, maxY = -1;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const alpha = data[(y * width + x) * 4 + 3];
+        if (alpha > 30) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX >= minX && maxY >= minY) {
+      const padX = Math.round(width * 0.005);
+      const padY = Math.round(height * 0.02);
+      bounds = {
+        sx: Math.max(0, minX - padX),
+        sy: Math.max(0, minY - padY),
+        sw: Math.min(width, maxX + padX) - Math.max(0, minX - padX) + 1,
+        sh: Math.min(height, maxY + padY) - Math.max(0, minY - padY) + 1,
+      };
+    }
+  } catch (error) {
+    bounds = null;
+  }
+  IMAGE_ALPHA_BOUNDS.set(src, bounds);
+  return bounds;
 }
 
 function tintDrawnPixels(context, width, height, color) {
@@ -921,7 +967,7 @@ function buildFenceClip(context, path, data) {
   return { rails, topRail };
 }
 
-function drawReferenceStrip(context, img, data, color, path, product) {
+function drawReferenceStrip(context, img, data, color, path, product, src) {
   const shape = buildFenceClip(context, path, data);
   if (!shape) return false;
   const rails = shape.rails;
@@ -931,6 +977,7 @@ function drawReferenceStrip(context, img, data, color, path, product) {
   const lastTop = getVerticalTop(last, getPostHeightAt(last, data) * 0.98, data);
   const width = Math.max(80, Math.hypot(lastTop.x - firstTop.x, lastTop.y - firstTop.y));
   const height = Math.max(40, (Math.hypot(first.x - firstTop.x, first.y - firstTop.y) + Math.hypot(last.x - lastTop.x, last.y - lastTop.y)) / 2);
+  const bounds = getImageAlphaBounds(img, src) || { sx: 0, sy: 0, sw: img.naturalWidth || img.width, sh: img.naturalHeight || img.height };
 
   context.save();
   buildFenceClip(context, path, data);
@@ -940,9 +987,9 @@ function drawReferenceStrip(context, img, data, color, path, product) {
   const cM = (first.x - firstTop.x) / height;
   const dM = (first.y - firstTop.y) / height;
   context.setTransform(aM, bM, cM, dM, firstTop.x, firstTop.y);
-  context.globalAlpha = isAestheticFence(product) ? 0.98 : 0.90;
-  context.drawImage(img, 0, 0, width, height);
-  if (shouldTintReferenceImage(product, img.src)) tintDrawnPixels(context, width, height, color);
+  context.globalAlpha = isAestheticFence(product) ? 0.98 : 0.92;
+  context.drawImage(img, bounds.sx, bounds.sy, bounds.sw, bounds.sh, 0, 0, width, height);
+  if (shouldTintReferenceImage(product, src)) tintDrawnPixels(context, width, height, color);
   context.restore();
   return true;
 }
@@ -959,7 +1006,7 @@ function drawReferencePanels(context, posts, src, data, color, path, product) {
 
   // Product reference is now drawn as a full strip across the selected boundary.
   // This preserves large decorative motifs such as the tree/peacock panels from the database.
-  return drawReferenceStrip(context, img, data, color, path, product);
+  return drawReferenceStrip(context, img, data, color, path, product, src);
 }
 
 function drawFenceRailsAndMesh(context, rails, data, color, type) {
@@ -1105,7 +1152,7 @@ function drawFurnitureDesigner(rect) {
   });
 }
 
-function openDesigner(kind) {
+async function openDesigner(kind) {
   if (!state.siteImage) {
     alert('Upload a site image first.');
     return;
@@ -1127,6 +1174,7 @@ function openDesigner(kind) {
     : `${state.furniturePositions.length || 0} furniture placement dots currently saved.`;
   el.designerModal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
+  await ensureSelectedReferenceReady(getSelectedProduct());
   drawDesignerCanvas();
 }
 
@@ -1559,7 +1607,7 @@ async function generateConcept() {
 function downloadResult() {
   if (!state.resultReady) return;
   const a = document.createElement('a');
-  a.download = `a1-visualization-studio-v0-5-7-${new Date().toISOString().slice(0,19).replace(/[:T]/g, '-')}.png`;
+  a.download = `a1-visualization-studio-v0-5-8-${new Date().toISOString().slice(0,19).replace(/[:T]/g, '-')}.png`;
   a.href = el.resultCanvas.toDataURL('image/png');
   a.click();
 }

@@ -1,71 +1,37 @@
-# A-1 Visualization Studio v0.5.7 — Product Reference Lock Trial
+# A-1 Visualization Studio v0.5.8 — Database Raster Reference Fix
 
-This build fixes the root issue observed in v0.5.6: the local preview and fence-line editor were still not giving enough priority to the selected product reference from the database.
+This version fixes the local preview/root renderer issue found in v0.5.7.
 
-## What was wrong before
+## What was wrong
 
-### 1. The app was using the correct selected product, but the local renderer was generic
-The selected Aesthetic Fence product was present in the database, but the renderer still drew a generic mesh/rail system on top of every fence. This made aesthetic fence products look like a plain mesh fence in the pop-up, local preview, and AI guide image.
+The selected database product was being read correctly, but the fence renderer was treating raster PNG references like a mask and tinting every non-transparent pixel. Because the aesthetic fence PNG contains a semi-transparent weldmesh/panel area, the renderer converted it into a solid green strip. That made the pop-up and local preview look like a generic filled fence rather than the selected aesthetic fence.
 
-### 2. Large aesthetic reference images were being squeezed into tiny post-to-post bays
-The aesthetic tree / peacock PNGs are full product strip references. The old rendering logic attempted to draw the full reference inside every small post interval, so the motif became too compressed or invisible.
+## What changed in v0.5.8
 
-### 3. Image loading was asynchronous
-The local preview could be captured for the AI payload before the reference PNG had finished painting onto the canvas.
+- Real PNG/JPEG database references are no longer tinted like masks.
+- Tinting is now applied only to procedural SVG placeholder products.
+- Aesthetic fence references are drawn from the actual database image.
+- Transparent asset bounds are auto-cropped before mapping to the fence strip, so empty transparent sky/ground areas in the reference PNG do not squash the fence details.
+- The fence placement pop-up now waits for the selected product reference image to load before drawing.
+- The generic fence mesh is now strictly fallback-only when no usable reference image exists.
+- Browser storage key updated to `v058` for clean testing.
 
-### 4. Browser storage kept older libraries
-Earlier versions used the same browser local-storage key, so older local libraries could remain active after deployment and hide newer seed-library fixes.
+## Testing checklist
 
-## What changed in v0.5.7
+After redeploying:
 
-### Product-reference-first local renderer
-- If a fence product has a reference image, the app now draws that image as a **full perspective product strip** along the selected fence path.
-- The generic mesh renderer is now only a fallback when no product reference image exists.
-- Aesthetic tree / peacock references should now be visible in:
-  - manual fence editor pop-up
-  - local preview
-  - Stability AI guide image
-  - final guide-lock overlay
+1. Hard refresh the browser.
+2. Select **Aesthetic Fence — Tree Motif**.
+3. Open **Let me draw the fence line myself**.
+4. Confirm the tree motif / weldmesh reference appears in the pop-up, not a plain solid green strip.
+5. Click **Save placement**.
+6. Click **Generate local preview**.
+7. Only after the local preview is correct, test Stability AI.
 
-### Image preloading before preview generation
-- The app now waits for the selected product reference image to load before generating the preview.
-- This prevents the AI payload from being captured before the local reference image appears.
+## Stability workflow
 
-### New storage key
-- Browser library storage now uses a v0.5.7 key.
-- This forces the updated seed product library to load fresh during testing.
+The Stability guide-lock / inpaint flow from v0.5.6 is retained. However, the most important checkpoint remains the local preview:
 
-### Stability guide-lock retained
-- Stability still uses the clean local guide image as the base image.
-- After Stability returns, the selected local product reference is locked back on top of the result.
+> If local preview is wrong, the AI output will be wrong.
 
-## Required Vercel environment variable
-
-```env
-STABILITY_API_KEY=your_stability_api_key_here
-```
-
-## Recommended environment variables
-
-```env
-DEFAULT_AI_PROVIDER=stability
-STABILITY_MODE=edit-inpaint
-STABILITY_OUTPUT_FORMAT=png
-STABILITY_NEGATIVE_PROMPT=people, cars, text, watermark, logo, deformed fence, wrong building, distorted architecture, unrealistic shadows, extra products, extra landscaping, wooden fence, timber fence, brown fence, solid privacy fence, ranch fence, different product design
-```
-
-## How to test this fix
-
-1. Deploy v0.5.7.
-2. Hard refresh the deployed app.
-3. Select **Aesthetic Fence — Tree Motif**.
-4. Open **Let me draw the fence line myself**.
-5. The aesthetic reference should now appear in the editor overlay.
-6. Save placement.
-7. Click **Generate local preview**.
-8. Confirm the aesthetic reference appears before testing Stability.
-9. Select **Stability AI** and click **Generate AI refinement**.
-
-## Important note
-
-The first pass to judge is no longer the Stability result. First check whether the **local preview itself** shows the selected database image. If the local preview is correct, the AI guide image will also be correct.
+v0.5.8 focuses on making the database product reference visible and correct before sending any image to the AI provider.

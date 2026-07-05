@@ -35,7 +35,7 @@ async function testStabilityKey() {
       ok: true,
       provider: 'stability',
       ready: true,
-      message: 'Stability key validated. Product-reference lock workflow is wired in v0.5.7.',
+      message: 'Stability key validated. Database raster reference fix workflow is wired in v0.5.8.',
       balance: data?.credits ?? data?.balance ?? data,
     },
   };
