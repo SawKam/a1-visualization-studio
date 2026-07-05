@@ -31,7 +31,7 @@ export default function handler(req, res) {
   res.status(200).json({
     ok: true,
     service: 'a1-visualization-studio-api',
-    version: 'v0.6.3-internal-trial-ready',
+    version: 'v0.6.4-status-fix',
     providers: providersStatus(),
   });
 }

@@ -199,6 +199,24 @@ async function parseFetchJsonSafe(response) {
   }
 }
 
+function setStatus(message, lock = false) {
+  els.statusText.textContent = message;
+  state.statusLocked = lock;
+}
+
+function clearStatusLock() {
+  state.statusLocked = false;
+}
+
+function showAfterMessage(message) {
+  els.afterImage.removeAttribute('src');
+  els.afterImage.classList.add('hidden');
+  els.afterEmpty.classList.remove('hidden');
+  els.afterEmpty.textContent = message;
+  state.resultImage = '';
+  els.downloadBtn.disabled = true;
+}
+
 function currentIntent() {
   return INTENTS[state.mode].find((item) => item.id === state.intentId) || INTENTS[state.mode][0];
 }
@@ -428,6 +446,7 @@ function renderAfter(image) {
     els.afterImage.removeAttribute('src');
     els.afterImage.classList.add('hidden');
     els.afterEmpty.classList.remove('hidden');
+    els.afterEmpty.textContent = 'Generated AI result will appear here.';
     state.resultImage = '';
     els.downloadBtn.disabled = true;
   }
@@ -482,6 +501,7 @@ function updateGenerateReadiness() {
   if (analyzeMismatch()) missing.push('matching mode/instruction');
 
   els.generateBtn.disabled = missing.length > 0;
+  if (state.statusLocked) return;
   if (missing.length) {
     els.statusText.textContent = `Waiting for: ${missing.join(', ')}.`;
   } else if (!state.resultImage) {
@@ -507,6 +527,7 @@ async function testProvider() {
 }
 
 function setLoading(isLoading) {
+  state.isGenerating = isLoading;
   els.generateBtn.disabled = isLoading;
   els.testProviderBtn.disabled = isLoading;
   els.refreshStatusBtn.disabled = isLoading;
@@ -538,13 +559,17 @@ async function generateImage() {
       references: referencesArray(),
     };
     const approxPayloadMb = (JSON.stringify(payload).length / (1024 * 1024)).toFixed(1);
-    els.statusText.textContent = `Generating AI render... API payload approx. ${approxPayloadMb} MB.`;
+    setStatus(`Generating AI render... API payload approx. ${approxPayloadMb} MB. Please wait; OpenAI image generation can take 30–90 seconds.`, true);
+    showAfterMessage('Generating... please wait. If this takes too long, check Vercel logs or try one fewer reference image.');
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
     const res = await fetch('/api/generate-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
     const data = await parseFetchJsonSafe(res);
     if (!res.ok) {
       const msg = data.error || 'Generation failed.';
@@ -558,10 +583,15 @@ async function generateImage() {
       throw new Error(msg + hint);
     }
 
-    renderAfter(data.image || '');
-    els.statusText.textContent = data.note || `Generated successfully via ${data.providerLabel || state.currentProvider}.`;
+    if (!data.image) throw new Error('The server responded successfully but no image was returned. Check the provider response in Vercel logs.');
+    renderAfter(data.image);
+    setStatus(data.note || `Generated successfully via ${data.providerLabel || state.currentProvider}.`, true);
   } catch (error) {
-    els.statusText.textContent = error.message;
+    const message = error.name === 'AbortError'
+      ? 'Generation timed out in the browser after 90 seconds. Check Vercel Function logs. Try OpenAI size 1024x1024, medium quality, or one fewer reference image.'
+      : error.message;
+    setStatus(message, true);
+    showAfterMessage(message);
   } finally {
     setLoading(false);
     updateAllDerivedUI();
@@ -586,6 +616,7 @@ function bindUpload(inputEl, key) {
 }
 
 function selectProvider(provider) {
+  clearStatusLock();
   state.currentProvider = provider;
   if (['openai', 'stability'].includes(provider)) els.providerSelect.value = provider;
   updateProviderHelp();
