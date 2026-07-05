@@ -73,15 +73,71 @@ function readFileAsDataUrl(file) {
   });
 }
 
+function loadImageFromDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+async function compressImageDataUrl(file, key) {
+  const original = await readFileAsDataUrl(file);
+  const img = await loadImageFromDataUrl(original);
+  const maxSide = key === 'site' ? 1400 : 1050;
+  const quality = key === 'site' ? 0.78 : 0.82;
+  let { width, height } = img;
+  const scale = Math.min(1, maxSide / Math.max(width, height));
+  width = Math.max(1, Math.round(width * scale));
+  height = Math.max(1, Math.round(height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(img, 0, 0, width, height);
+  const compressed = canvas.toDataURL('image/jpeg', quality);
+  return {
+    dataUrl: compressed,
+    originalSize: file.size,
+    compressedBytes: Math.round((compressed.length * 3) / 4),
+    width,
+    height,
+  };
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return '';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function parseFetchJsonSafe(response) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    const clean = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const message = clean || `Server returned non-JSON response with status ${response.status}.`;
+    return { error: message, raw: text };
+  }
+}
+
 async function setUpload(key, file) {
   if (!file) return;
-  const dataUrl = await readFileAsDataUrl(file);
-  state.uploads[key] = { file, dataUrl, name: file.name };
+  els.statusText.textContent = 'Compressing uploaded image for API-safe request size...';
+  const compressed = await compressImageDataUrl(file, key);
+  const dataUrl = compressed.dataUrl;
+  state.uploads[key] = { file, dataUrl, name: file.name, compressed };
   renderUpload(key);
   if (key === 'site') renderBefore();
   updatePromptPreview();
   if (!state.resultImage) {
-    els.statusText.textContent = 'Ready to generate once your preferred provider is selected.';
+    const before = formatBytes(compressed.originalSize);
+    const after = formatBytes(compressed.compressedBytes);
+    els.statusText.textContent = `Image prepared for API upload: ${before} → ${after}.`;
   }
 }
 
@@ -106,7 +162,8 @@ function renderUpload(key) {
     els[previewWrapId].classList.remove('hidden');
     els[previewId].src = upload.dataUrl;
     els[metaRowId].classList.remove('hidden');
-    els[fileNameId].textContent = upload.name;
+    const detail = upload.compressed ? ` · ${upload.compressed.width}×${upload.compressed.height} · ${formatBytes(upload.compressed.compressedBytes)}` : '';
+    els[fileNameId].textContent = `${upload.name}${detail}`;
   } else {
     els[emptyId].classList.remove('hidden');
     els[previewWrapId].classList.add('hidden');
@@ -193,7 +250,7 @@ function referencesArray() {
 async function loadProviderStatus() {
   try {
     const res = await fetch('/api/health');
-    const data = await res.json();
+    const data = await parseFetchJsonSafe(res);
     state.providerStatus = data.providers || {};
     renderProviderBadges();
     updateProviderHelp();
@@ -244,7 +301,7 @@ async function testProvider() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider: els.providerSelect.value }),
     });
-    const data = await res.json();
+    const data = await parseFetchJsonSafe(res);
     if (!res.ok) throw new Error(data.error || 'Provider test failed.');
     els.statusText.textContent = data.message || 'Provider connection succeeded.';
     await loadProviderStatus();
@@ -284,13 +341,21 @@ async function generateImage() {
       references: referencesArray(),
     };
 
+    const approxPayloadMb = (JSON.stringify(payload).length / (1024 * 1024)).toFixed(1);
+    els.statusText.textContent = `Generating AI render... API payload approx. ${approxPayloadMb} MB.`;
+
     const res = await fetch('/api/generate-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Generation failed.');
+    const data = await parseFetchJsonSafe(res);
+    if (!res.ok) {
+      const hint = data.error && data.error.toLowerCase().includes('request ent')
+        ? ' The upload payload is still too large. Try a smaller site image or one fewer reference image.'
+        : '';
+      throw new Error((data.error || 'Generation failed.') + hint);
+    }
 
     renderAfter(data.image || '');
     els.statusText.textContent = data.note || `Generated successfully via ${data.providerLabel || provider}.`;
