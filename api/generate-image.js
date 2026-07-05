@@ -27,12 +27,8 @@ function appendImage(form, fieldName, dataUrl, filename) {
 }
 
 function extractImageFromOpenAIResponse(data) {
-  if (data?.data?.[0]?.b64_json) {
-    return `data:image/png;base64,${data.data[0].b64_json}`;
-  }
-  if (data?.data?.[0]?.url) {
-    return data.data[0].url;
-  }
+  if (data?.data?.[0]?.b64_json) return `data:image/png;base64,${data.data[0].b64_json}`;
+  if (data?.data?.[0]?.url) return data.data[0].url;
   if (Array.isArray(data?.output)) {
     for (const item of data.output) {
       if (Array.isArray(item.content)) {
@@ -48,9 +44,13 @@ function extractImageFromOpenAIResponse(data) {
 }
 
 function buildFullPrompt({ prompt, productName, category, provider }) {
-  const providerNote = provider === 'pollinations'
-    ? 'Important: this provider is a trial text-to-image route and may not perfectly preserve the original uploaded site photo or the exact product geometry. Still aim to match the controlled concept and product intent as closely as possible.'
-    : 'Preserve the site architecture, camera angle, perspective, daylight, ground, road, building, windows, and background as much as possible.';
+  let providerNote = 'Preserve the site architecture, camera angle, perspective, daylight, ground, road, building, windows, and background as much as possible.';
+  if (provider === 'pollinations') {
+    providerNote = 'Important: this provider is a trial text-to-image route and may not perfectly preserve the original uploaded site photo or the exact product geometry. Still aim to match the controlled concept and product intent as closely as possible.';
+  }
+  if (provider === 'stability') {
+    providerNote = 'Use the supplied local concept preview as the structural composition guide. Preserve the photographed site, camera angle, building geometry, road/ground plane, and product placement. Refine the rough overlay into a realistic product visualization without changing the property scene.';
+  }
 
   return [
     'Create a realistic sales visualization for A-1 Fence / Meshable.',
@@ -60,7 +60,8 @@ function buildFullPrompt({ prompt, productName, category, provider }) {
     'Replace the rough overlay with a realistic product visualization. Keep product geometry and color faithful to the approved reference and placement guide.',
     `Selected product: ${productName || 'Approved product'}.`,
     `Product family: ${category || 'visualization'}.`,
-    'Do not add text labels, watermarks, people, extra vehicles, or unrelated objects.',
+    'Do not add text labels, watermarks, people, extra vehicles, extra landscapes, or unrelated objects.',
+    'Do not replace the factory/building/site with a different scene.',
     '',
     'User/product instruction:',
     prompt || 'Create a realistic visualization based on the selected product and placement guide.',
@@ -70,8 +71,14 @@ function buildFullPrompt({ prompt, productName, category, provider }) {
 async function fetchBinaryAsDataUrl(response) {
   const arrayBuffer = await response.arrayBuffer();
   const base64 = Buffer.from(arrayBuffer).toString('base64');
-  const mime = response.headers.get('content-type') || 'image/jpeg';
+  const mime = response.headers.get('content-type') || 'image/png';
   return `data:${mime};base64,${base64}`;
+}
+
+async function responseToJsonOrText(response) {
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) return response.json();
+  return { raw: await response.text() };
 }
 
 async function generateWithOpenAI(body) {
@@ -113,7 +120,7 @@ async function generateWithOpenAI(body) {
     body: form,
   });
 
-  const data = await response.json().catch(async () => ({ raw: await response.text() }));
+  const data = await responseToJsonOrText(response);
   if (!response.ok) {
     const err = new Error(data?.error?.message || data?.message || 'OpenAI image API request failed.');
     err.statusCode = response.status;
@@ -141,11 +148,7 @@ async function generateWithPollinations(body) {
   const model = process.env.POLLINATIONS_MODEL || 'flux';
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=${width}&height=${height}&model=${encodeURIComponent(model)}&seed=${seed}&nologo=true&safe=true`;
 
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: { Accept: 'image/*' },
-  });
-
+  const response = await fetch(url, { method: 'GET', headers: { Accept: 'image/*' } });
   if (!response.ok) {
     const err = new Error(`Pollinations request failed with status ${response.status}.`);
     err.statusCode = response.status;
@@ -156,13 +159,88 @@ async function generateWithPollinations(body) {
   return { image, provider: 'pollinations', providerLabel: PROVIDER_LABELS.pollinations, model };
 }
 
+async function generateWithStability(body) {
+  const apiKey = process.env.STABILITY_API_KEY;
+  if (!apiKey) {
+    const err = new Error('STABILITY_API_KEY is not configured on the server.');
+    err.statusCode = 500;
+    throw err;
+  }
+
+  const { conceptImage, prompt, productName, category } = body || {};
+  if (!conceptImage || !prompt) {
+    const err = new Error('Missing conceptImage or prompt for Stability AI generation. Generate the local preview first.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Stability Stable Image Control Structure accepts one image as the structural guide.
+  // The app sends the local preview because it already contains the original site + planned product placement.
+  const mode = process.env.STABILITY_MODE || 'control-structure';
+  const outputFormat = process.env.STABILITY_OUTPUT_FORMAT || 'png';
+  const controlStrength = process.env.STABILITY_CONTROL_STRENGTH || '0.72';
+  const endpoint = mode === 'sd3-image-to-image'
+    ? 'https://api.stability.ai/v2beta/stable-image/generate/sd3'
+    : 'https://api.stability.ai/v2beta/stable-image/control/structure';
+
+  const fullPrompt = buildFullPrompt({ prompt, productName, category, provider: 'stability' });
+  const form = new FormData();
+  appendImage(form, 'image', conceptImage, 'local-concept-structure.png');
+  form.append('prompt', fullPrompt);
+  form.append('output_format', outputFormat);
+
+  if (mode === 'sd3-image-to-image') {
+    form.append('mode', 'image-to-image');
+    form.append('model', process.env.STABILITY_SD3_MODEL || 'sd3.5-large');
+    form.append('strength', process.env.STABILITY_IMAGE_STRENGTH || '0.45');
+  } else {
+    form.append('control_strength', controlStrength);
+  }
+
+  const negativePrompt = process.env.STABILITY_NEGATIVE_PROMPT || 'people, cars, text, watermark, logo, different building, changed architecture, distorted fence, extra vegetation, fantasy scene, unrelated landscape';
+  if (negativePrompt) form.append('negative_prompt', negativePrompt);
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: 'image/*',
+    },
+    body: form,
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!response.ok) {
+    const data = await responseToJsonOrText(response);
+    const err = new Error(data?.errors?.[0] || data?.error || data?.message || `Stability AI request failed with status ${response.status}.`);
+    err.statusCode = response.status;
+    err.details = data;
+    throw err;
+  }
+
+  if (!contentType.startsWith('image/')) {
+    const data = await responseToJsonOrText(response);
+    const image = data?.image ? `data:image/${outputFormat};base64,${data.image}` : '';
+    if (!image) {
+      const err = new Error('Stability AI response did not contain an image.');
+      err.statusCode = 502;
+      err.details = data;
+      throw err;
+    }
+    return { image, provider: 'stability', providerLabel: PROVIDER_LABELS.stability, model: mode };
+  }
+
+  const image = await fetchBinaryAsDataUrl(response);
+  return { image, provider: 'stability', providerLabel: PROVIDER_LABELS.stability, model: mode };
+}
+
 async function scaffoldProvider(provider, envName) {
   if (!process.env[envName]) {
     const err = new Error(`${envName} is not configured on the server.`);
     err.statusCode = 500;
     throw err;
   }
-  const err = new Error(`${PROVIDER_LABELS[provider]} is scaffolded in v0.5.2. Connection plumbing is ready, but final generation endpoint/model mapping still needs to be implemented.`);
+  const err = new Error(`${PROVIDER_LABELS[provider]} is scaffolded. Connection plumbing is ready, but final generation endpoint/model mapping still needs to be implemented.`);
   err.statusCode = 501;
   throw err;
 }
@@ -175,7 +253,7 @@ export default async function handler(req, res) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    const provider = body?.provider || process.env.DEFAULT_AI_PROVIDER || 'openai';
+    const provider = body?.provider || process.env.DEFAULT_AI_PROVIDER || 'stability';
 
     if (provider === 'local-preview') {
       return res.status(200).json({
@@ -196,7 +274,7 @@ export default async function handler(req, res) {
         result = await generateWithPollinations(body);
         break;
       case 'stability':
-        result = await scaffoldProvider('stability', 'STABILITY_API_KEY');
+        result = await generateWithStability(body);
         break;
       case 'replicate':
         result = await scaffoldProvider('replicate', 'REPLICATE_API_TOKEN');

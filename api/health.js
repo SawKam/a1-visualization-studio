@@ -17,8 +17,10 @@ function providersStatus() {
     },
     stability: {
       configured: Boolean(process.env.STABILITY_API_KEY),
-      ready: false,
-      message: process.env.STABILITY_API_KEY ? 'Key detected. Generation route still scaffolded.' : 'Missing STABILITY_API_KEY.',
+      ready: Boolean(process.env.STABILITY_API_KEY),
+      message: process.env.STABILITY_API_KEY
+        ? `Key detected. Stability generation wired using ${process.env.STABILITY_MODE || 'control-structure'} mode.`
+        : 'Missing STABILITY_API_KEY.',
     },
     replicate: {
       configured: Boolean(process.env.REPLICATE_API_TOKEN),
@@ -37,7 +39,7 @@ export default function handler(req, res) {
   res.status(200).json({
     ok: true,
     service: 'a1-visualization-studio-api',
-    version: 'v0.5.2',
+    version: 'v0.5.4',
     providers: providersStatus(),
   });
 }
