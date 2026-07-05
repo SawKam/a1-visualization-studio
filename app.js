@@ -277,7 +277,7 @@ const PROVIDER_INFO = {
   },
   stability: {
     label: 'Stability AI',
-    help: 'Connected in v0.5.4 using Stability AI Stable Image Control Structure. It uses the local concept preview as a structure guide, so it should preserve placement better than free text-to-image routes, but it may still reinterpret the scene.',
+    help: 'Connected in v0.5.5 using Stability AI preserve-site inpaint workflow. The original site photo is sent as the base image and a generated edit mask limits changes to the intended fence or furniture zone, improving scene preservation versus the older control-structure test.',
   },
   replicate: {
     label: 'Replicate',
@@ -1190,6 +1190,134 @@ function getProductReferencePayload(product) {
   return refs.slice(0, 3);
 }
 
+function createOffscreenCanvas(width = el.resultCanvas.width, height = el.resultCanvas.height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+function renderOriginalImageDataUrl(quality = 0.9) {
+  const canvas = createOffscreenCanvas();
+  const context = canvas.getContext('2d');
+  drawBaseImage(context, canvas, state.siteImage);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
+function drawFenceMaskOverlay(context, path, data) {
+  const rails = samplePath(path, 72);
+  if (!rails.length) return;
+  const topRail = rails.map(point => getVerticalTop(point, getPostHeightAt(point, data) * 0.98, data));
+  const posts = samplePosts(path, el.ctcSelect.value, data);
+
+  context.save();
+  context.fillStyle = '#ffffff';
+  context.beginPath();
+  rails.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
+  [...topRail].reverse().forEach(point => context.lineTo(point.x, point.y));
+  context.closePath();
+  context.fill();
+
+  context.strokeStyle = '#ffffff';
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  context.lineWidth = 28;
+  context.beginPath();
+  rails.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
+  context.stroke();
+
+  context.lineWidth = 24;
+  context.beginPath();
+  topRail.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
+  context.stroke();
+
+  posts.forEach(point => {
+    const height = getPostHeightAt(point, data);
+    const top = getVerticalTop(point, height, data);
+    context.lineWidth = Math.max(16, 28 * getDepthScale(point, data));
+    context.beginPath();
+    context.moveTo(point.x, point.y);
+    context.lineTo(top.x, top.y);
+    context.stroke();
+  });
+  context.restore();
+}
+
+function drawFurnitureMaskOverlay(context, canvas, rect) {
+  const points = getFurniturePositionsForCanvas(canvas);
+  context.save();
+  context.fillStyle = '#ffffff';
+  points.forEach(point => {
+    const box = getFurnitureBox(point, rect, Number(el.furnitureScale.value));
+    const pad = Math.max(22, box.width * 0.14);
+    roundRect(context, box.x - pad, box.y - pad, box.width + pad * 2, box.height + pad * 2, 28);
+    context.fill();
+  });
+  context.restore();
+}
+
+function renderEditMaskDataUrl() {
+  const canvas = createOffscreenCanvas();
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#000000';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const rect = fitImageRect(state.siteImage, canvas);
+  if (!rect) return canvas.toDataURL('image/png');
+
+  if (state.selectedCategory === 'fence') {
+    if (state.pathPoints.length < 2) autoPath(false);
+    const path = state.pathPoints.length >= 2 ? getFencePathForCanvas(canvas) : [
+      { x: rect.x + rect.width * 0.04, y: rect.y + rect.height * 0.86 },
+      { x: rect.x + rect.width * 0.50, y: rect.y + rect.height * 0.79 },
+      { x: rect.x + rect.width * 0.96, y: rect.y + rect.height * 0.73 },
+    ];
+    const data = getPerspectiveData(rect);
+    drawFenceMaskOverlay(context, path, data);
+  } else {
+    syncFurnitureDots();
+    drawFurnitureMaskOverlay(context, canvas, rect);
+  }
+
+  return canvas.toDataURL('image/png');
+}
+
+function buildPlacementSummary() {
+  const product = getSelectedProduct();
+  if (!product) return '';
+
+  if (state.selectedCategory === 'fence') {
+    const points = (state.pathPoints.length >= 2 ? getFencePathForCanvas(el.resultCanvas) : []).map((point, index) => {
+      const x = ((point.x / el.resultCanvas.width) * 100).toFixed(1);
+      const y = ((point.y / el.resultCanvas.height) * 100).toFixed(1);
+      return 'P' + (index + 1) + '(' + x + '%, ' + y + '%)';
+    });
+
+    const parts = [
+      'Place a ' + product.name + ' fence along the visible site boundary in perspective.',
+      'Color / finish should read as ' + el.colorSelect.value + '.',
+      'Height should read as ' + el.heightSelect.value + '.',
+      'Post spacing should follow ' + el.ctcSelect.value + '.',
+      'Top option: ' + el.topOptionSelect.value + '.',
+    ];
+
+    if (points.length) parts.push('Use this approximate boundary path on the image frame: ' + points.join(', ') + '.');
+    return parts.join(' ');
+  }
+
+  const positions = getFurniturePositionsForCanvas(el.resultCanvas).map((point, index) => {
+    const x = ((point.x / el.resultCanvas.width) * 100).toFixed(1);
+    const y = ((point.y / el.resultCanvas.height) * 100).toFixed(1);
+    return 'set ' + (index + 1) + ' at (' + x + '%, ' + y + '%)';
+  });
+
+  return [
+    'Place ' + el.setsCountSelect.value + ' set(s) of ' + product.name + ' on the site image.',
+    'Color / finish should read as ' + el.colorSelect.value + '.',
+    positions.length ? 'Approximate placement points: ' + positions.join('; ') + '.' : '',
+  ].filter(Boolean).join(' ');
+}
+
+
 async function generateAiRefinement() {
   if (!state.siteImage) {
     alert('Upload a site image first.');
@@ -1212,17 +1340,26 @@ async function generateAiRefinement() {
   }
 
   el.generateAiBtn.disabled = true;
-  el.generateStatus.textContent = `Sending original image, placement preview, and prompt to ${PROVIDER_INFO[provider]?.label || provider}...`;
+  el.generateStatus.textContent = provider === 'stability'
+    ? 'Sending original image, generated edit mask, and prompt to Stability AI preserve-site workflow...'
+    : `Sending original image, placement preview, and prompt to ${PROVIDER_INFO[provider]?.label || provider}...`;
 
   try {
     const payload = {
       provider,
-      originalImage: canvasToCompressedDataUrl(el.originalCanvas, 0.88),
+      originalImage: renderOriginalImageDataUrl(0.9),
       conceptImage: canvasToCompressedDataUrl(el.resultCanvas, 0.88),
+      editMask: renderEditMaskDataUrl(),
       prompt: el.generatedPrompt.value,
       productName: product.name,
       category: state.selectedCategory,
       references: getProductReferencePayload(product),
+      placementSummary: buildPlacementSummary(),
+      color: el.colorSelect.value,
+      height: state.selectedCategory === 'fence' ? el.heightSelect.value : '',
+      postCtc: state.selectedCategory === 'fence' ? el.ctcSelect.value : '',
+      topOption: state.selectedCategory === 'fence' ? el.topOptionSelect.value : '',
+      setsCount: state.selectedCategory === 'furniture' ? el.setsCountSelect.value : '',
     };
 
     const response = await fetch('/api/generate-image', {
@@ -1304,7 +1441,7 @@ function generateConcept() {
 function downloadResult() {
   if (!state.resultReady) return;
   const a = document.createElement('a');
-  a.download = `a1-visualization-studio-v0-5-1-${new Date().toISOString().slice(0,19).replace(/[:T]/g, '-')}.png`;
+  a.download = `a1-visualization-studio-v0-5-5-${new Date().toISOString().slice(0,19).replace(/[:T]/g, '-')}.png`;
   a.href = el.resultCanvas.toDataURL('image/png');
   a.click();
 }

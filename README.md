@@ -1,86 +1,90 @@
-# A-1 Visualization Studio v0.5.4 — Stability AI Control Trial
+# A-1 Visualization Studio v0.5.5 — Stability Preserve-Site Trial
 
-This build upgrades the previous multi-provider trial by wiring **Stability AI** as a real generation provider.
+This build changes the Stability workflow so the AI no longer treats the concept preview as a loose scene-generation guide.
 
-## What changed in v0.5.4
+## What changed in v0.5.5
 
-### Stability AI is now wired
-- The **Stability AI** provider is no longer only scaffolded.
-- `/api/generate-image` now routes Stability requests to:
-  - `https://api.stability.ai/v2beta/stable-image/control/structure`
-- The app sends the **local concept preview** as the structure/control image.
-- This means Stability receives a guide image that already contains:
-  - the original site photo
-  - selected product placement
-  - local fence/furniture overlay
-  - perspective path / placement intent
+### Stability AI now uses a preserve-site edit flow
+- The Stability provider now defaults to:
+  - `https://api.stability.ai/v2beta/stable-image/edit/inpaint`
+- The app sends:
+  - the **original site image** as the base photo
+  - an automatically generated **edit mask** covering only the intended fence/furniture zone
+  - a richer prompt with placement summary and selected product settings
+- This is designed to preserve:
+  - the building
+  - road / ground plane
+  - sky / background
+  - camera angle and scene perspective
 
-### Stability key testing improved
-- `/api/test-provider` now validates the Stability API key using the Stability balance endpoint:
-  - `https://api.stability.ai/v1/user/balance`
-- `/api/health` now shows Stability as **ready** when `STABILITY_API_KEY` is configured.
+### Automatic edit-mask generation added
+- For **fence** mode, the app builds a white mask strip along the chosen fence path and post height band.
+- For **furniture** mode, the app builds white mask blocks around each placed furniture set.
+- Black areas remain protected from editing.
 
-## Provider behavior
+### Stability messaging updated
+- Provider label now shows **Stability AI (preserve site / inpaint)**.
+- `/api/health` reports v0.5.5 and indicates the current Stability mode.
+- `/api/test-provider` confirms the preserve-site workflow.
 
-| Provider | Status in v0.5.4 | Notes |
+## Provider behavior in v0.5.5
+
+| Provider | Status | Notes |
 |---|---|---|
 | Local preview only | Ready | No API cost. Validates placement and product logic. |
 | Pollinations | Ready | Free workflow test only. Output may not preserve the uploaded image. |
-| Stability AI | Wired | Uses Stable Image Control Structure with the local preview as guide image. |
-| OpenAI | Wired if key exists | Optional. Requires `OPENAI_API_KEY`. |
+| Stability AI | Wired | Uses original site image + generated edit mask for better preservation. |
+| OpenAI | Wired if key exists | Still available as an alternate image-edit route. |
 | Replicate | Scaffolded | Token detection only. |
 | Hugging Face | Scaffolded | Key detection only. |
 
-## Required Vercel environment variable for Stability
-
-Add this in Vercel:
+## Required Vercel environment variable
 
 ```env
 STABILITY_API_KEY=your_stability_api_key_here
 ```
 
-Recommended optional values:
+## Recommended environment variables
 
 ```env
 DEFAULT_AI_PROVIDER=stability
-STABILITY_MODE=control-structure
+STABILITY_MODE=edit-inpaint
 STABILITY_OUTPUT_FORMAT=png
-STABILITY_CONTROL_STRENGTH=0.72
-STABILITY_NEGATIVE_PROMPT=people, cars, text, watermark, logo, deformed fence, wrong building, distorted architecture, unrealistic shadows, extra products
+STABILITY_NEGATIVE_PROMPT=people, cars, text, watermark, logo, deformed fence, wrong building, distorted architecture, unrealistic shadows, extra products, extra landscaping
 ```
 
-After adding environment variables, redeploy the project.
+Optional fallback mode:
 
-## How to test Stability
+```env
+STABILITY_MODE=control-structure
+STABILITY_CONTROL_STRENGTH=0.72
+```
 
-1. Upload site image.
-2. Select fence/furniture product.
-3. Draw placement or use automatic local placement.
+## How to test
+
+1. Upload a site image.
+2. Select a fence or furniture product.
+3. Use the default placement or manual placement tools.
 4. Click **Generate local preview**.
-5. Select **Stability AI** from provider dropdown.
+5. Choose **Stability AI (preserve site / inpaint)**.
 6. Click **Test API connection**.
 7. Click **Generate AI refinement**.
 
-## Important limitation
+## Expected improvement over v0.5.4
 
-Stability Control Structure should preserve placement better than Pollinations, but it may still reinterpret the scene. This is the first live Stability test build. We should evaluate output quality and then tune:
+Compared to the old control-structure route, v0.5.5 should:
+- preserve the original site scene better
+- reduce full-scene reinvention
+- focus AI edits only near the fence / furniture zone
 
-- `STABILITY_CONTROL_STRENGTH`
-- prompt wording
-- whether to use Control Structure or SD3 image-to-image mode
-- local guide image strength and visual clarity
+## Important note
 
-## Alternate Stability mode
-
-The backend includes an experimental SD3 image-to-image mode. To try it, set:
-
-```env
-STABILITY_MODE=sd3-image-to-image
-STABILITY_SD3_MODEL=sd3.5-large
-STABILITY_IMAGE_STRENGTH=0.45
-```
-
-Then redeploy.
+This is still a trial build. If output quality still needs improvement, the next tuning options are:
+- refine mask size and softness
+- tighten prompt language further
+- add product-specific mask logic
+- add a clean guide image without labels for future hybrid workflows
+- test an OpenAI + Stability comparison mode
 
 ## Files changed
 
