@@ -43,23 +43,46 @@ function extractImageFromOpenAIResponse(data) {
   return '';
 }
 
-function buildFullPrompt({ prompt, productName, category, provider }) {
+function buildFullPrompt({
+  prompt,
+  productName,
+  category,
+  provider,
+  placementSummary,
+  color,
+  height,
+  postCtc,
+  topOption,
+  setsCount,
+}) {
   let providerNote = 'Preserve the site architecture, camera angle, perspective, daylight, ground, road, building, windows, and background as much as possible.';
   if (provider === 'pollinations') {
     providerNote = 'Important: this provider is a trial text-to-image route and may not perfectly preserve the original uploaded site photo or the exact product geometry. Still aim to match the controlled concept and product intent as closely as possible.';
   }
   if (provider === 'stability') {
-    providerNote = 'Use the supplied local concept preview as the structural composition guide. Preserve the photographed site, camera angle, building geometry, road/ground plane, and product placement. Refine the rough overlay into a realistic product visualization without changing the property scene.';
+    providerNote = 'Use the original site photograph as the base image. Preserve every unmasked part of the scene: building, sky, road, pavement, landscaping, camera angle, and perspective. Edit only the masked placement region and turn it into a realistic product visualization.';
   }
+
+  const metadataLines = [
+    productName ? `Selected product: ${productName}.` : '',
+    category ? `Product family: ${category}.` : '',
+    color ? `Selected color / finish: ${color}.` : '',
+    height ? `Selected height: ${height}.` : '',
+    postCtc ? `Selected post CTC / spacing: ${postCtc}.` : '',
+    topOption ? `Selected top option: ${topOption}.` : '',
+    setsCount ? `Selected furniture set count: ${setsCount}.` : '',
+    placementSummary ? `Placement instruction: ${placementSummary}` : '',
+  ].filter(Boolean);
 
   return [
     'Create a realistic sales visualization for A-1 Fence / Meshable.',
     'Use image 1 as the original site photograph.',
-    'Use image 2 as the controlled placement guide showing where the selected product should appear.',
+    provider === 'stability'
+      ? 'For Stability AI, respect the edit mask and only change the intended product placement zone.'
+      : 'Use image 2 as the controlled placement guide showing where the selected product should appear.',
     providerNote,
-    'Replace the rough overlay with a realistic product visualization. Keep product geometry and color faithful to the approved reference and placement guide.',
-    `Selected product: ${productName || 'Approved product'}.`,
-    `Product family: ${category || 'visualization'}.`,
+    'Replace any rough overlay with a realistic product visualization. Keep product geometry and color faithful to the approved reference and placement intent.',
+    ...metadataLines,
     'Do not add text labels, watermarks, people, extra vehicles, extra landscapes, or unrelated objects.',
     'Do not replace the factory/building/site with a different scene.',
     '',
@@ -89,7 +112,20 @@ async function generateWithOpenAI(body) {
     throw err;
   }
 
-  const { originalImage, conceptImage, prompt, productName, category, references = [] } = body || {};
+  const {
+    originalImage,
+    conceptImage,
+    prompt,
+    productName,
+    category,
+    references = [],
+    placementSummary,
+    color,
+    height,
+    postCtc,
+    topOption,
+    setsCount,
+  } = body || {};
   if (!originalImage || !conceptImage || !prompt) {
     const err = new Error('Missing originalImage, conceptImage, or prompt.');
     err.statusCode = 400;
@@ -97,7 +133,7 @@ async function generateWithOpenAI(body) {
   }
 
   const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
-  const fullPrompt = buildFullPrompt({ prompt, productName, category, provider: 'openai' });
+  const fullPrompt = buildFullPrompt({ prompt, productName, category, provider: 'openai', placementSummary, color, height, postCtc, topOption, setsCount });
 
   const form = new FormData();
   form.append('model', model);
@@ -140,13 +176,13 @@ async function generateWithOpenAI(body) {
 }
 
 async function generateWithPollinations(body) {
-  const { prompt, productName, category } = body || {};
-  const fullPrompt = buildFullPrompt({ prompt, productName, category, provider: 'pollinations' });
+  const { prompt, productName, category, placementSummary, color, height, postCtc, topOption, setsCount } = body || {};
+  const fullPrompt = buildFullPrompt({ prompt, productName, category, provider: 'pollinations', placementSummary, color, height, postCtc, topOption, setsCount });
   const width = 1344;
-  const height = 768;
+  const heightPx = 768;
   const seed = Math.floor(Date.now() % 1000000);
   const model = process.env.POLLINATIONS_MODEL || 'flux';
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=${width}&height=${height}&model=${encodeURIComponent(model)}&seed=${seed}&nologo=true&safe=true`;
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=${width}&height=${heightPx}&model=${encodeURIComponent(model)}&seed=${seed}&nologo=true&safe=true`;
 
   const response = await fetch(url, { method: 'GET', headers: { Accept: 'image/*' } });
   if (!response.ok) {
@@ -167,37 +203,52 @@ async function generateWithStability(body) {
     throw err;
   }
 
-  const { conceptImage, prompt, productName, category } = body || {};
-  if (!conceptImage || !prompt) {
-    const err = new Error('Missing conceptImage or prompt for Stability AI generation. Generate the local preview first.');
-    err.statusCode = 400;
-    throw err;
+  const {
+    originalImage,
+    conceptImage,
+    editMask,
+    prompt,
+    productName,
+    category,
+    placementSummary,
+    color,
+    height,
+    postCtc,
+    topOption,
+    setsCount,
+  } = body || {};
+
+  const mode = process.env.STABILITY_MODE || 'edit-inpaint';
+  const outputFormat = process.env.STABILITY_OUTPUT_FORMAT || 'png';
+  const negativePrompt = process.env.STABILITY_NEGATIVE_PROMPT || 'people, cars, text, watermark, logo, different building, changed architecture, distorted fence, extra vegetation, fantasy scene, unrelated landscape';
+  const fullPrompt = buildFullPrompt({ prompt, productName, category, provider: 'stability', placementSummary, color, height, postCtc, topOption, setsCount });
+
+  let endpoint = 'https://api.stability.ai/v2beta/stable-image/edit/inpaint';
+  const form = new FormData();
+
+  if (mode === 'control-structure') {
+    if (!conceptImage || !prompt) {
+      const err = new Error('Missing conceptImage or prompt for Stability AI control structure generation.');
+      err.statusCode = 400;
+      throw err;
+    }
+    endpoint = 'https://api.stability.ai/v2beta/stable-image/control/structure';
+    appendImage(form, 'image', conceptImage, 'local-concept-structure.png');
+    form.append('control_strength', process.env.STABILITY_CONTROL_STRENGTH || '0.72');
+  } else {
+    if (!originalImage || !editMask || !prompt) {
+      const err = new Error('Missing originalImage, editMask, or prompt for Stability AI preserve-site generation.');
+      err.statusCode = 400;
+      throw err;
+    }
+    appendImage(form, 'image', originalImage, 'original-site.jpg');
+    appendImage(form, 'mask', editMask, 'placement-mask.png');
+    endpoint = 'https://api.stability.ai/v2beta/stable-image/edit/inpaint';
+    if (process.env.STABILITY_INPAINT_SEED) form.append('seed', process.env.STABILITY_INPAINT_SEED);
   }
 
-  // Stability Stable Image Control Structure accepts one image as the structural guide.
-  // The app sends the local preview because it already contains the original site + planned product placement.
-  const mode = process.env.STABILITY_MODE || 'control-structure';
-  const outputFormat = process.env.STABILITY_OUTPUT_FORMAT || 'png';
-  const controlStrength = process.env.STABILITY_CONTROL_STRENGTH || '0.72';
-  const endpoint = mode === 'sd3-image-to-image'
-    ? 'https://api.stability.ai/v2beta/stable-image/generate/sd3'
-    : 'https://api.stability.ai/v2beta/stable-image/control/structure';
-
-  const fullPrompt = buildFullPrompt({ prompt, productName, category, provider: 'stability' });
-  const form = new FormData();
-  appendImage(form, 'image', conceptImage, 'local-concept-structure.png');
   form.append('prompt', fullPrompt);
   form.append('output_format', outputFormat);
-
-  if (mode === 'sd3-image-to-image') {
-    form.append('mode', 'image-to-image');
-    form.append('model', process.env.STABILITY_SD3_MODEL || 'sd3.5-large');
-    form.append('strength', process.env.STABILITY_IMAGE_STRENGTH || '0.45');
-  } else {
-    form.append('control_strength', controlStrength);
-  }
-
-  const negativePrompt = process.env.STABILITY_NEGATIVE_PROMPT || 'people, cars, text, watermark, logo, different building, changed architecture, distorted fence, extra vegetation, fantasy scene, unrelated landscape';
   if (negativePrompt) form.append('negative_prompt', negativePrompt);
 
   const response = await fetch(endpoint, {

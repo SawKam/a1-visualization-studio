@@ -35,7 +35,7 @@ async function testStabilityKey() {
       ok: true,
       provider: 'stability',
       ready: true,
-      message: 'Stability key validated. Control Structure generation is wired in v0.5.4.',
+      message: 'Stability key validated. Preserve-site inpaint workflow is wired in v0.5.5.',
       balance: data?.credits ?? data?.balance ?? data,
     },
   };

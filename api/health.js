@@ -19,7 +19,7 @@ function providersStatus() {
       configured: Boolean(process.env.STABILITY_API_KEY),
       ready: Boolean(process.env.STABILITY_API_KEY),
       message: process.env.STABILITY_API_KEY
-        ? `Key detected. Stability generation wired using ${process.env.STABILITY_MODE || 'control-structure'} mode.`
+        ? `Key detected. Stability generation wired using ${process.env.STABILITY_MODE || 'edit-inpaint'} mode.`
         : 'Missing STABILITY_API_KEY.',
     },
     replicate: {
@@ -39,7 +39,7 @@ export default function handler(req, res) {
   res.status(200).json({
     ok: true,
     service: 'a1-visualization-studio-api',
-    version: 'v0.5.4',
+    version: 'v0.5.5',
     providers: providersStatus(),
   });
 }
