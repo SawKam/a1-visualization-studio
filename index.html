@@ -3,456 +3,201 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>A-1 Visualization Studio — v0.5.9</title>
+  <title>A-1 Visualization Studio — v0.6.0 Simple Reference Trial</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app-shell">
-    <header class="topbar">
-      <div class="brand-block">
-        <div class="eyebrow">Deployable UI direction · Reference-Grounded AI Blend v0.5.9</div>
+  <div class="shell">
+    <header class="hero">
+      <div>
+        <div class="eyebrow">v0.6.0 · simple reference ai trial</div>
         <h1>A-1 Visualization Studio</h1>
-        <p>Guided customer visualizer with hidden admin-managed library for fence systems and Meshable outdoor furniture.</p>
+        <p>
+          A simplified testing version. Upload the site photo plus product reference images,
+          then let the AI decide placement and render the scene automatically.
+        </p>
       </div>
-      <div class="top-actions">
-        <button id="customerModeBtn" class="mode-btn active">Customer Studio</button>
-        <button id="adminModeBtn" class="mode-btn">Admin Library</button>
+      <div class="hero-note">
+        <strong>What changed?</strong>
+        <span>No manual fence line tool. No placement popup. No hidden library dependency.</span>
       </div>
     </header>
 
     <main>
-      <section id="customerView" class="view-section">
-        <section class="hero-grid">
-          <article class="card upload-card">
-            <div class="card-head">
-              <span class="step-chip">01</span>
-              <div>
-                <h2>Upload site image</h2>
-                <p>Upload the customer's factory, bungalow, terrace, landscape, or compound photo.</p>
-              </div>
-            </div>
+      <section class="card">
+        <div class="section-head">
+          <span class="step">01</span>
+          <div>
+            <h2>Upload site image</h2>
+            <p>Upload the customer site, compound, terrace, factory frontage, or landscape image.</p>
+          </div>
+        </div>
 
-            <label class="dropzone" id="siteDropzone">
-              <input id="siteInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
-              <div id="siteEmpty" class="drop-empty">
-                <span class="drop-icon">＋</span>
-                <strong>Upload property / site photo</strong>
-                <small>JPEG, PNG, WEBP</small>
+        <label class="upload-box upload-large">
+          <input id="siteInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+          <div id="siteEmpty" class="upload-empty">
+            <span class="plus">＋</span>
+            <strong>Upload site photo</strong>
+            <small>JPEG, PNG, WEBP</small>
+          </div>
+          <div id="sitePreviewWrap" class="upload-preview hidden">
+            <img id="sitePreview" alt="Site preview">
+          </div>
+        </label>
+        <div class="upload-footer-row hidden" id="siteMetaRow">
+          <span id="siteFileName">site.jpg</span>
+          <button class="secondary-btn" id="siteRemoveBtn" type="button">Remove</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <span class="step">02</span>
+          <div>
+            <h2>Upload product reference images</h2>
+            <p>Upload the fence or furniture references directly. AI will use these as the product source.</p>
+          </div>
+        </div>
+
+        <div class="field-grid top-gap">
+          <label>
+            Product family
+            <select id="familySelect">
+              <option value="fence">Fence / Perimeter product</option>
+              <option value="furniture">Outdoor furniture</option>
+            </select>
+          </label>
+          <label>
+            Product name / design
+            <input id="productNameInput" type="text" placeholder="Example: Aesthetic Fence — Tree Motif">
+          </label>
+          <label>
+            Color / finish
+            <input id="colorInput" type="text" placeholder="Example: A-1 Green / Matte Black">
+          </label>
+          <label>
+            Height / size
+            <input id="heightInput" type="text" placeholder="Example: 1.8 m / 3-seater set / 2.75 m bay">
+          </label>
+        </div>
+
+        <div class="reference-grid">
+          <div class="reference-card">
+            <div class="reference-title">Front / clean reference</div>
+            <label class="upload-box ref-box">
+              <input id="frontInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+              <div id="frontEmpty" class="upload-empty compact">
+                <strong>Upload front reference</strong>
               </div>
-              <div id="sitePreviewWrap" class="upload-preview hidden">
-                <img id="sitePreview" alt="Site preview" />
-                <div class="upload-footer">
-                  <span id="siteFileName">site.jpg</span>
-                  <button type="button" id="removeSiteBtn">Remove</button>
-                </div>
+              <div id="frontPreviewWrap" class="upload-preview hidden">
+                <img id="frontPreview" alt="Front reference">
               </div>
             </label>
-          </article>
-
-          <article class="card selector-card">
-            <div class="card-head">
-              <span class="step-chip">02</span>
-              <div>
-                <h2>Select what to visualize</h2>
-                <p>Customers only see approved choices. The hidden reference library remains in admin mode.</p>
-              </div>
-            </div>
-
-            <div class="selector-layout">
-              <div class="selector-left">
-                <div class="family-toggle">
-                  <button id="familyFenceBtn" class="family-btn active" data-family="fence">Fence / Perimeter</button>
-                  <button id="familyFurnitureBtn" class="family-btn" data-family="furniture">Meshable Furniture</button>
-                </div>
-
-                <div class="option-grid">
-                  <label>
-                    Category / Type
-                    <select id="typeSelect"></select>
-                  </label>
-                  <label>
-                    Product / Design
-                    <select id="productSelect"></select>
-                  </label>
-                  <label>
-                    Color / Finish
-                    <select id="colorSelect"></select>
-                  </label>
-                  <label id="heightFieldWrap">
-                    Height
-                    <select id="heightSelect"></select>
-                  </label>
-                  <label id="ctcFieldWrap">
-                    Post CTC
-                    <select id="ctcSelect"></select>
-                  </label>
-                  <label id="topFieldWrap">
-                    Top Option
-                    <select id="topOptionSelect"></select>
-                  </label>
-                  <label id="setsFieldWrap" class="hidden">
-                    Number of sets
-                    <select id="setsCountSelect">
-                      <option value="1">1 set</option>
-                      <option value="2">2 sets</option>
-                      <option value="3">3 sets</option>
-                      <option value="4">4 sets</option>
-                      <option value="5">5 sets</option>
-                      <option value="6">6 sets</option>
-                    </select>
-                  </label>
-                  <label id="furnitureScaleWrap" class="hidden range-field">
-                    Furniture scale
-                    <input id="furnitureScale" type="range" min="35" max="155" value="76" />
-                    <span class="range-value"><span id="furnitureScaleValue">76</span>%</span>
-                  </label>
-                </div>
-              </div>
-
-              <div class="selector-right">
-                <div class="preview-mini-card">
-                  <div class="preview-mini-head">
-                    <span>Selected reference</span>
-                    <strong id="selectedProductBadge">No product selected</strong>
-                  </div>
-                  <div class="preview-mini-box">
-                    <img id="referencePreview" alt="Selected reference preview" />
-                    <div id="referenceEmpty" class="reference-empty">Approved reference preview will appear here.</div>
-                  </div>
-                  <p id="previewMeta" class="preview-meta">Preview visible to the customer. Full database remains hidden.</p>
-                </div>
-              </div>
-            </div>
-          </article>
-        </section>
-
-        <section class="card intent-card">
-          <div class="section-title-row">
-            <div>
-              <div class="eyebrow small">Step 03</div>
-              <h2>Intent, prompt, and placement control</h2>
-              <p>Choose a quick visualization intent, add optional instructions, or open manual placement tools.</p>
-            </div>
-            <div class="mini-status" id="manualStatus">Manual placement: using automatic defaults</div>
-          </div>
-
-          <div class="intent-grid">
-            <div class="intent-block">
-              <div class="subhead">Preset intent buttons</div>
-              <div id="promptPresets" class="preset-grid"></div>
-            </div>
-
-            <div class="intent-block prompt-block">
-              <div class="subhead">Optional prompt by user</div>
-              <textarea id="customPrompt" placeholder="Write an optional instruction, e.g. keep the fence only on the visible road side, or arrange 3 café sets near the far-right corner."></textarea>
-              <div class="subhead generated">Generated instruction for AI image API</div>
-              <textarea id="generatedPrompt" readonly></textarea>
+            <div class="ref-footer hidden" id="frontMetaRow">
+              <span id="frontFileName">front.png</span>
+              <button class="tiny-btn" id="frontRemoveBtn" type="button">Remove</button>
             </div>
           </div>
 
-          <div class="manual-actions-row">
-            <button id="openFenceDesignerBtn" class="soft-btn">Let me draw the fence line myself</button>
-            <button id="openFurnitureDesignerBtn" class="soft-btn">Let me place furniture manually</button>
-          </div>
-        </section>
-
-        <section class="card generate-card">
-          <div class="section-title-row">
-            <div>
-              <div class="eyebrow small">Step 04</div>
-              <h2>Generate, compare, and download</h2>
-              <p>Generate a controlled local concept preview first. This same structure can later be sent to a real AI image API.</p>
-            </div>
-            <div class="result-toggle">
-              <button id="sideBySideBtn" class="toggle-btn active">Side by side</button>
-              <button id="resultOnlyBtn" class="toggle-btn">Result only</button>
+          <div class="reference-card">
+            <div class="reference-title">Perspective / lifestyle reference</div>
+            <label class="upload-box ref-box">
+              <input id="perspectiveInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+              <div id="perspectiveEmpty" class="upload-empty compact">
+                <strong>Upload perspective reference</strong>
+              </div>
+              <div id="perspectivePreviewWrap" class="upload-preview hidden">
+                <img id="perspectivePreview" alt="Perspective reference">
+              </div>
+            </label>
+            <div class="ref-footer hidden" id="perspectiveMetaRow">
+              <span id="perspectiveFileName">perspective.png</span>
+              <button class="tiny-btn" id="perspectiveRemoveBtn" type="button">Remove</button>
             </div>
           </div>
 
-          <div class="generate-toolbar">
-            <button id="generateBtn" class="secondary-btn">Generate local preview</button>
-            <button id="generateAiBtn" class="primary-btn">Generate AI refinement</button>
-            <button id="downloadBtn" class="secondary-btn" disabled>Download final</button>
-            <span id="generateStatus" class="generate-status">Awaiting site image and product selection.</span>
-          </div>
-
-          <div class="provider-panel">
-            <div class="provider-panel-head">
-              <div>
-                <div class="subhead">v0.5.9 reference-grounded ai blend</div>
-                <p>Switch providers without rebuilding the UI. Use local preview only, or test public / paid providers through the same backend contract.</p>
+          <div class="reference-card">
+            <div class="reference-title">Optional secondary reference</div>
+            <label class="upload-box ref-box">
+              <input id="secondaryInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+              <div id="secondaryEmpty" class="upload-empty compact">
+                <strong>Upload optional side / detail reference</strong>
               </div>
-              <div id="providerTestStatus" class="mini-status">Select a provider and test connection.</div>
-            </div>
-            <div class="provider-grid">
-              <label>
-                AI provider
-                <select id="providerSelect">
-                  <option value="local-preview">Local preview only</option>
-                  <option value="pollinations">Pollinations (free trial style)</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="stability">Stability AI (reference-grounded blend)</option>
-                  <option value="replicate">Replicate (scaffold)</option>
-                  <option value="huggingface">Hugging Face (scaffold)</option>
-                </select>
-              </label>
-              <div class="provider-actions">
-                <button id="testApiBtn" class="secondary-btn" type="button">Test API connection</button>
-                <button id="refreshProviderBtn" class="ghost-btn" type="button">Refresh provider status</button>
+              <div id="secondaryPreviewWrap" class="upload-preview hidden">
+                <img id="secondaryPreview" alt="Secondary reference">
               </div>
-            </div>
-            <div id="providerBadges" class="provider-badges"></div>
-            <div id="providerHelp" class="api-note">Local preview only uses no external API credits. Choose another provider to try an actual server-side image call.</div>
-
-          <div class="reference-grounded-panel">
-            <div class="provider-panel-head">
-              <div>
-                <div class="subhead">v0.5.9 reference-grounded AI blend</div>
-                <p>The database product is the source of truth. The local preview is the placement guide. The AI API should refine realism, not redesign the product.</p>
-              </div>
-              <div id="bundleSummaryBadge" class="mini-status">Waiting for product selection.</div>
-            </div>
-
-            <div class="bundle-grid">
-              <label>
-                Blend mode
-                <select id="blendModeSelect">
-                  <option value="strict" selected>Strict product lock</option>
-                  <option value="balanced">Balanced realism</option>
-                  <option value="creative">Creative realism</option>
-                </select>
-              </label>
-              <label class="check-row"><input id="includePlacementGuideChk" type="checkbox" checked /> Include local preview as placement guide</label>
-              <label class="check-row"><input id="includeFrontRefChk" type="checkbox" checked /> Include front / clean database reference</label>
-              <label class="check-row"><input id="includePerspectiveRefChk" type="checkbox" checked /> Include perspective / lifestyle database reference</label>
-              <label class="check-row"><input id="includeSecondaryRefChk" type="checkbox" checked /> Include side / top / secondary references when available</label>
-            </div>
-
-            <div class="bundle-preview-grid">
-              <div class="bundle-preview-card">
-                <span>Front / clean reference</span>
-                <div class="bundle-thumb"><img id="bundleFrontImg" alt="Front reference" /><div id="bundleFrontEmpty" class="reference-empty">No front reference</div></div>
-              </div>
-              <div class="bundle-preview-card">
-                <span>Perspective / lifestyle</span>
-                <div class="bundle-thumb"><img id="bundlePerspectiveImg" alt="Perspective reference" /><div id="bundlePerspectiveEmpty" class="reference-empty">No perspective reference</div></div>
-              </div>
-              <div class="bundle-preview-card">
-                <span>Secondary reference</span>
-                <div class="bundle-thumb"><img id="bundleSecondaryImg" alt="Secondary reference" /><div id="bundleSecondaryEmpty" class="reference-empty">No side/top/site reference</div></div>
-              </div>
-            </div>
-
-            <div id="bundleSummary" class="api-note">This pack will be sent as: site photo + selected product references + local placement guide + metadata prompt.</div>
-          </div>
-
-          <div id="resultSection" class="result-area hidden">
-            <div id="resultGrid" class="result-grid">
-              <div class="result-card original-card">
-                <span>Before</span>
-                <canvas id="originalCanvas" width="1500" height="820"></canvas>
-              </div>
-              <div class="result-card">
-                <span>After</span>
-                <canvas id="resultCanvas" width="1500" height="820"></canvas>
-              </div>
+            </label>
+            <div class="ref-footer hidden" id="secondaryMetaRow">
+              <span id="secondaryFileName">secondary.png</span>
+              <button class="tiny-btn" id="secondaryRemoveBtn" type="button">Remove</button>
             </div>
           </div>
-        </section>
+        </div>
+
+        <label class="top-gap full-width">
+          Additional instructions
+          <textarea id="notesInput" placeholder="Examples: keep the fence along the visible road-side boundary, or place two outdoor seating sets near the front glazed elevation. If no instruction is given, the AI will choose the most sensible placement automatically."></textarea>
+        </label>
+
+        <div class="prompt-panel">
+          <div class="reference-title">Generated AI instruction</div>
+          <textarea id="promptPreview" readonly></textarea>
+        </div>
       </section>
 
-      <section id="adminView" class="view-section hidden">
-        <div class="admin-layout">
-          <article class="card admin-form-card">
-            <div class="section-title-row tight">
-              <div>
-                <div class="eyebrow small">Admin Panel</div>
-                <h2>Library builder</h2>
-                <p>Create the hidden reference library and option sets that customers will use through simple dropdowns.</p>
-              </div>
-            </div>
-
-            <form id="libraryForm" class="admin-form">
-              <input id="editingProductId" type="hidden" />
-              <div class="option-grid admin-grid">
-                <label>
-                  Library type
-                  <select id="adminCategory">
-                    <option value="fence">Fence</option>
-                    <option value="furniture">Meshable Outdoor Furniture</option>
-                  </select>
-                </label>
-                <label>
-                  Category / Type
-                  <input id="adminType" type="text" placeholder="Aesthetic Fence, 358, Café Chair" required />
-                </label>
-                <label class="full-span">
-                  Product name
-                  <input id="adminName" type="text" placeholder="Aesthetic Fence — Tree Motif" required />
-                </label>
-                <label>
-                  Colors / finishes
-                  <input id="adminColors" type="text" placeholder="A-1 Green, Graphite Black, White" />
-                </label>
-                <label class="fence-only-admin">
-                  Heights
-                  <input id="adminHeights" type="text" placeholder="1.8 m, 2.4 m, 3.0 m" />
-                </label>
-                <label class="fence-only-admin">
-                  Post CTC options
-                  <input id="adminCtc" type="text" placeholder="2.0 m, 2.5 m, 3.0 m" />
-                </label>
-                <label class="fence-only-admin">
-                  Top options
-                  <input id="adminTopOptions" type="text" placeholder="None, Y-arm, Concertina" />
-                </label>
-                <label>
-                  Front / clean reference
-                  <input id="adminReferenceImage" type="file" accept="image/jpeg,image/png,image/webp" />
-                </label>
-                <label>
-                  Side view
-                  <input id="adminSideImage" type="file" accept="image/jpeg,image/png,image/webp" />
-                </label>
-                <label>
-                  Top view
-                  <input id="adminTopImage" type="file" accept="image/jpeg,image/png,image/webp" />
-                </label>
-                <label>
-                  Perspective view
-                  <input id="adminPerspectiveImage" type="file" accept="image/jpeg,image/png,image/webp" />
-                </label>
-                <label>
-                  Lifestyle / installed view
-                  <input id="adminSiteImage" type="file" accept="image/jpeg,image/png,image/webp" />
-                </label>
-                <label class="full-span">
-                  Admin notes / AI guidance
-                  <textarea id="adminNotes" placeholder="Describe geometry, finish, motif details, scale cues, and what the AI should preserve."></textarea>
-                </label>
-              </div>
-              <div class="admin-actions">
-                <button type="submit" class="primary-btn">Save product</button>
-                <button type="button" id="newProductBtn" class="secondary-btn">New</button>
-                <button type="button" id="exportLibraryBtn" class="secondary-btn">Export JSON</button>
-                <label class="secondary-btn import-btn">Import JSON<input id="importLibraryInput" type="file" accept="application/json" hidden /></label>
-                <button type="button" id="resetLibraryBtn" class="ghost-btn">Reset seed</button>
-              </div>
-            </form>
-          </article>
-
-          <article class="card admin-list-card">
-            <div class="section-title-row tight">
-              <div>
-                <div class="eyebrow small">Hidden Database</div>
-                <h2>Products in library</h2>
-                <p>The customer will not see this table — only filtered dropdowns and a small approved preview image.</p>
-              </div>
-              <div class="admin-filter-row">
-                <button class="library-filter active" data-filter="all">All</button>
-                <button class="library-filter" data-filter="fence">Fence</button>
-                <button class="library-filter" data-filter="furniture">Furniture</button>
-              </div>
-            </div>
-            <div id="adminLibraryList" class="library-list"></div>
-          </article>
+      <section class="card">
+        <div class="section-head">
+          <span class="step">03</span>
+          <div>
+            <h2>Choose AI provider and generate</h2>
+            <p>The provider receives the site photo and uploaded product reference images. No manual placement guide is used.</p>
+          </div>
         </div>
+
+        <div class="provider-bar top-gap">
+          <label class="provider-select-wrap">
+            AI provider
+            <select id="providerSelect">
+              <option value="openai">OpenAI (recommended for direct image references)</option>
+              <option value="stability">Stability AI (experimental / prompt-led)</option>
+              <option value="pollinations">Pollinations (trial / prompt-led)</option>
+              <option value="local-preview">Local preview only</option>
+            </select>
+          </label>
+          <div class="provider-actions">
+            <button class="secondary-btn" id="testProviderBtn" type="button">Test API connection</button>
+            <button class="secondary-btn" id="refreshStatusBtn" type="button">Refresh provider status</button>
+          </div>
+        </div>
+
+        <div id="providerBadges" class="provider-badges top-gap"></div>
+        <div id="providerHelp" class="helper-box top-gap"></div>
+
+        <div class="generate-row top-gap">
+          <button class="primary-btn" id="generateBtn" type="button">Generate AI render</button>
+          <button class="secondary-btn" id="downloadBtn" type="button" disabled>Download final</button>
+          <span id="statusText" class="status-text">Upload a site image and at least one product reference to begin.</span>
+        </div>
+      </section>
+
+      <section class="results-grid top-gap-lg">
+        <article class="result-card">
+          <div class="result-title">Before</div>
+          <div class="result-canvas-wrap">
+            <img id="beforeImage" alt="Before">
+            <div id="beforeEmpty" class="result-empty">Uploaded site image will appear here.</div>
+          </div>
+        </article>
+
+        <article class="result-card">
+          <div class="result-title">After</div>
+          <div class="result-canvas-wrap">
+            <img id="afterImage" alt="After">
+            <div id="afterEmpty" class="result-empty">Generated AI result will appear here.</div>
+          </div>
+        </article>
       </section>
     </main>
-  </div>
-
-  <div id="designerModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-backdrop" data-close-modal="true"></div>
-    <div class="modal-dialog large">
-      <div class="modal-header">
-        <div>
-          <div class="eyebrow small" id="designerEyebrow">Manual Placement</div>
-          <h2 id="designerTitle">Fence line & perspective editor</h2>
-          <p id="designerDescription">Draw and adjust placement on the uploaded site image.</p>
-        </div>
-        <button id="closeDesignerBtn" class="icon-btn">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="designer-main">
-          <div class="designer-canvas-wrap">
-            <canvas id="designerCanvas" width="1600" height="920"></canvas>
-            <div id="designerEmpty" class="canvas-empty">Upload a site image first.</div>
-          </div>
-          <aside class="designer-sidebar">
-            <div class="designer-reference-card">
-              <div class="subhead">Selected database reference</div>
-              <div class="designer-reference-thumb">
-                <img id="designerReferencePreview" alt="Designer reference preview" />
-                <div id="designerReferenceEmpty" class="reference-empty">Reference image will appear here.</div>
-              </div>
-              <strong id="designerReferenceName">No product selected</strong>
-              <p id="designerReferenceStatus" class="helper-text">The manual placement tool should use the approved product from the admin database.</p>
-            </div>
-            <div id="fenceDesignerControls">
-              <div class="subhead">Fence controls</div>
-              <div class="toolbar-row">
-                <button id="autoPathBtn" class="secondary-btn">Auto Path</button>
-                <button id="drawPathBtn" class="secondary-btn">Draw</button>
-                <button id="editPathBtn" class="secondary-btn active">Edit</button>
-                <button id="clearPathBtn" class="ghost-btn">Clear</button>
-              </div>
-              <div class="field-stack">
-                <label>
-                  Perspective mode
-                  <select id="perspectiveMode">
-                    <option value="one">1-point</option>
-                    <option value="two" selected>2-point</option>
-                    <option value="three">3-point</option>
-                  </select>
-                </label>
-                <label>
-                  Right vanishing point
-                  <input id="vpRight" type="range" min="-250" max="350" value="180" />
-                  <span class="range-value"><span id="vpRightValue">180</span>%</span>
-                </label>
-                <label>
-                  Left vanishing point
-                  <input id="vpLeft" type="range" min="-250" max="350" value="-120" />
-                  <span class="range-value"><span id="vpLeftValue">-120</span>%</span>
-                </label>
-                <label>
-                  Horizon height
-                  <input id="horizon" type="range" min="-25" max="120" value="44" />
-                  <span class="range-value"><span id="horizonValue">44</span>%</span>
-                </label>
-                <label>
-                  Fence visual height
-                  <input id="fenceVisualHeight" type="range" min="70" max="260" value="150" />
-                  <span class="range-value"><span id="fenceVisualHeightValue">150</span>px</span>
-                </label>
-                <label class="check-row"><input id="showGuides" type="checkbox" checked /> Show perspective guides</label>
-                <label class="check-row"><input id="addShadow" type="checkbox" checked /> Add subtle ground shadow</label>
-              </div>
-            </div>
-
-            <div id="furnitureDesignerControls" class="hidden">
-              <div class="subhead">Furniture controls</div>
-              <p class="helper-text">Set the number of furniture sets on the main screen, then drag the placement dots here. Scale can also be adjusted.</p>
-              <div class="field-stack">
-                <label>
-                  Furniture scale
-                  <input id="modalFurnitureScale" type="range" min="35" max="155" value="76" />
-                  <span class="range-value"><span id="modalFurnitureScaleValue">76</span>%</span>
-                </label>
-                <button id="resetFurnitureDotsBtn" class="secondary-btn">Reset placement dots</button>
-              </div>
-            </div>
-          </aside>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <span id="designerFooterStatus">No manual placement saved yet.</span>
-        <div class="toolbar-row">
-          <button id="saveDesignerBtn" class="primary-btn">Save placement</button>
-          <button id="closeDesignerFooterBtn" class="secondary-btn">Close</button>
-        </div>
-      </div>
-    </div>
   </div>
 
   <script src="app.js"></script>

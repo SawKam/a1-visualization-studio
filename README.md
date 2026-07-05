@@ -1,37 +1,40 @@
-# A-1 Visualization Studio v0.5.9 — Reference-Grounded AI Blend
+# A-1 Visualization Studio v0.6.0 — Simple Reference AI Trial
 
-This version extends the renderer fix and adds a reference-grounded AI input workflow.
+This version intentionally simplifies the workflow.
 
-## What was wrong
+## What changed
+- No manual fence line drawing popup.
+- No hidden admin library dependency for testing.
+- User directly uploads:
+  - site image
+  - front / clean product reference
+  - perspective / lifestyle reference
+  - optional secondary reference
+- AI is asked to decide the placement automatically.
 
-The selected database product was being read correctly, but the fence renderer was treating raster PNG references like a mask and tinting every non-transparent pixel. Because the aesthetic fence PNG contains a semi-transparent weldmesh/panel area, the renderer converted it into a solid green strip. That made the pop-up and local preview look like a generic filled fence rather than the selected aesthetic fence.
+## Best use
+This version is best for quick testing when you want the AI to work mainly from uploaded reference images rather than from local placement overlays.
 
-## What changed in v0.5.9
+## Provider guidance
+- **OpenAI**: recommended for this version because it can receive the site photo and multiple direct reference images in one image-edit request.
+- **Stability AI**: available as an experimental route, but in this simple mode it is more prompt-led and may not follow uploaded reference images as strongly.
+- **Pollinations**: useful only for rough testing.
+- **Local preview**: returns the uploaded site image without external AI.
 
-- Real PNG/JPEG database references are no longer tinted like masks.
-- Tinting is now applied only to procedural SVG placeholder products.
-- Aesthetic fence references are drawn from the actual database image.
-- Transparent asset bounds are auto-cropped before mapping to the fence strip, so empty transparent sky/ground areas in the reference PNG do not squash the fence details.
-- The fence placement pop-up now waits for the selected product reference image to load before drawing.
-- The generic fence mesh is now strictly fallback-only when no usable reference image exists.
-- Browser storage key updated to `v059` for clean testing.
+## Required environment variables
+### For OpenAI
+- `OPENAI_API_KEY`
+- optional: `OPENAI_IMAGE_MODEL=gpt-image-1`
+- optional: `OPENAI_IMAGE_SIZE=1536x1024`
+- optional: `OPENAI_IMAGE_QUALITY=medium`
 
-## Testing checklist
+### For Stability AI
+- `STABILITY_API_KEY`
+- optional: `STABILITY_OUTPUT_FORMAT=png`
+- optional: `STABILITY_NEGATIVE_PROMPT=...`
 
-After redeploying:
+## Deployment
+Upload the full project to GitHub or Vercel and deploy.
 
-1. Hard refresh the browser.
-2. Select **Aesthetic Fence — Tree Motif**.
-3. Open **Let me draw the fence line myself**.
-4. Confirm the tree motif / weldmesh reference appears in the pop-up, not a plain solid green strip.
-5. Click **Save placement**.
-6. Click **Generate local preview**.
-7. Only after the local preview is correct, test Stability AI.
-
-## Stability workflow
-
-The Stability guide-lock / inpaint flow from v0.5.6 is retained. However, the most important checkpoint remains the local preview:
-
-> If local preview is wrong, the AI output will be wrong.
-
-v0.5.9 focuses on two things: making the database product reference visible and correct in the local preview, and packaging those product references for the AI request so the provider refines realism instead of redesigning the product.
+## Notes
+If your goal is **“site image + product reference images + AI decides placement automatically”**, OpenAI is the stronger provider to test first in this version.

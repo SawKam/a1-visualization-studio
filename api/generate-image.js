@@ -1,14 +1,10 @@
-export const config = {
-  maxDuration: 60,
-};
+export const config = { maxDuration: 60 };
 
 const PROVIDER_LABELS = {
   'local-preview': 'Local preview only',
-  pollinations: 'Pollinations',
   openai: 'OpenAI',
   stability: 'Stability AI',
-  replicate: 'Replicate',
-  huggingface: 'Hugging Face',
+  pollinations: 'Pollinations',
 };
 
 function dataUrlToBlobPart(dataUrl) {
@@ -43,52 +39,10 @@ function extractImageFromOpenAIResponse(data) {
   return '';
 }
 
-function buildFullPrompt({
-  prompt,
-  productName,
-  category,
-  provider,
-  placementSummary,
-  color,
-  height,
-  postCtc,
-  topOption,
-  setsCount,
-}) {
-  let providerNote = 'Preserve the site architecture, camera angle, perspective, daylight, ground, road, building, windows, and background as much as possible.';
-  if (provider === 'pollinations') {
-    providerNote = 'Important: this provider is a trial text-to-image route and may not perfectly preserve the original uploaded site photo or the exact product geometry. Still aim to match the controlled concept and product intent as closely as possible.';
-  }
-  if (provider === 'stability') {
-    providerNote = 'Use the supplied base image as the main composition reference. The database product references are authoritative for product identity, while the local preview is the placement guide. Keep the same camera angle, site, building, road, sky, perspective, product path, product color, and approximate product geometry. Do not replace the selected fence or furniture with a different material or design. Improve blending and realism only inside the masked zone.';
-  }
-
-  const metadataLines = [
-    productName ? `Selected product: ${productName}.` : '',
-    category ? `Product family: ${category}.` : '',
-    color ? `Selected color / finish: ${color}.` : '',
-    height ? `Selected height: ${height}.` : '',
-    postCtc ? `Selected post CTC / spacing: ${postCtc}.` : '',
-    topOption ? `Selected top option: ${topOption}.` : '',
-    setsCount ? `Selected furniture set count: ${setsCount}.` : '',
-    placementSummary ? `Placement instruction: ${placementSummary}` : '',
-  ].filter(Boolean);
-
-  return [
-    'Create a realistic sales visualization for A-1 Fence / Meshable.',
-    'Use image 1 as the original site photograph.',
-    provider === 'stability'
-      ? 'For Stability AI, respect the edit mask and only change the intended product placement zone.'
-      : 'Use image 2 as the controlled placement guide showing where the selected product should appear. Additional attached product reference images, when present, are the authoritative product source.',
-    providerNote,
-    'Replace any rough overlay with a realistic product visualization. Keep product geometry and color faithful to the approved database references and placement intent.',
-    ...metadataLines,
-    'Do not add text labels, watermarks, people, extra vehicles, extra landscapes, or unrelated objects.',
-    'Do not replace the factory/building/site with a different scene.',
-    '',
-    'User/product instruction:',
-    prompt || 'Create a realistic visualization based on the selected product and placement guide.',
-  ].join('\n');
+async function responseToJsonOrText(response) {
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) return response.json();
+  return { raw: await response.text() };
 }
 
 async function fetchBinaryAsDataUrl(response) {
@@ -98,10 +52,30 @@ async function fetchBinaryAsDataUrl(response) {
   return `data:${mime};base64,${base64}`;
 }
 
-async function responseToJsonOrText(response) {
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) return response.json();
-  return { raw: await response.text() };
+function buildFullPrompt({ prompt, productName, category, color, height, references = [], provider }) {
+  const familyWord = category === 'furniture' ? 'outdoor furniture' : 'fence / perimeter product';
+  const referenceSummary = references.map((ref, index) => `Image ${index + 2} is the ${ref.label || ref.role || 'product'} reference.`).join(' ');
+  const providerNote = provider === 'stability'
+    ? 'This provider is experimental in this simplified mode and may rely more heavily on the prompt than on exact uploaded product reference images.'
+    : provider === 'pollinations'
+      ? 'This provider is a public prompt-led route and may not preserve the uploaded site or product faithfully.'
+      : 'Use all uploaded images together. The first image is the site photo. The additional images are product references and should be treated as authoritative for product identity.';
+
+  return [
+    `Create a realistic ${familyWord} visualization for the uploaded site photo.`,
+    'Preserve the uploaded site, building, sky, road, camera angle, and overall composition as much as possible.',
+    referenceSummary,
+    providerNote,
+    category === 'fence'
+      ? 'For fence products, automatically identify the most plausible visible boundary, road edge, frontage line, or compound edge and place the selected fence naturally with realistic perspective, scale, and continuity.'
+      : 'For outdoor furniture, automatically identify the most suitable usable area in the scene and place the selected furniture naturally with realistic scale and spacing.',
+    'Use the uploaded product reference images as the source of truth for design details, motifs, profile, materials, and finish.',
+    productName ? `Selected product: ${productName}.` : '',
+    color ? `Selected color / finish: ${color}.` : '',
+    height ? `Selected height / size guidance: ${height}.` : '',
+    prompt || '',
+    'Do not add text labels, watermarks, unrelated objects, or replace the site with a different location.',
+  ].filter(Boolean).join('\n');
 }
 
 async function generateWithOpenAI(body) {
@@ -112,43 +86,28 @@ async function generateWithOpenAI(body) {
     throw err;
   }
 
-  const {
-    originalImage,
-    conceptImage,
-    prompt,
-    productName,
-    category,
-    references = [],
-    placementSummary,
-    color,
-    height,
-    postCtc,
-    topOption,
-    setsCount,
-  } = body || {};
-  if (!originalImage || !conceptImage || !prompt) {
-    const err = new Error('Missing originalImage, conceptImage, or prompt.');
+  const { originalImage, prompt, productName, category, color, height, references = [] } = body || {};
+  if (!originalImage) {
+    const err = new Error('Missing original site image.');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!references.length) {
+    const err = new Error('Please upload at least one product reference image for OpenAI generation.');
     err.statusCode = 400;
     throw err;
   }
 
   const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
-  const fullPrompt = buildFullPrompt({ prompt, productName, category, provider: 'openai', placementSummary, color, height, postCtc, topOption, setsCount });
+  const fullPrompt = buildFullPrompt({ prompt, productName, category, color, height, references, provider: 'openai' });
 
   const form = new FormData();
   form.append('model', model);
   form.append('prompt', fullPrompt);
   form.append('size', process.env.OPENAI_IMAGE_SIZE || '1536x1024');
   form.append('quality', process.env.OPENAI_IMAGE_QUALITY || 'medium');
-  form.append('background', 'auto');
-  appendImage(form, 'image', originalImage, 'original-site.jpg');
-  appendImage(form, 'image', conceptImage, 'controlled-placement-guide.jpg');
-
-  references.slice(0, 3).forEach((ref, index) => {
-    if (ref?.image && String(ref.image).startsWith('data:image/')) {
-      appendImage(form, 'image', ref.image, `product-reference-${index + 1}.png`);
-    }
-  });
+  appendImage(form, 'image', originalImage, 'site-photo.jpg');
+  references.slice(0, 3).forEach((ref, index) => appendImage(form, 'image', ref.image, `reference-${index + 1}.png`));
 
   const response = await fetch('https://api.openai.com/v1/images/edits', {
     method: 'POST',
@@ -176,21 +135,19 @@ async function generateWithOpenAI(body) {
 }
 
 async function generateWithPollinations(body) {
-  const { prompt, productName, category, placementSummary, color, height, postCtc, topOption, setsCount } = body || {};
-  const fullPrompt = buildFullPrompt({ prompt, productName, category, provider: 'pollinations', placementSummary, color, height, postCtc, topOption, setsCount });
+  const { prompt, productName, category, color, height, references = [] } = body || {};
+  const fullPrompt = buildFullPrompt({ prompt, productName, category, color, height, references, provider: 'pollinations' });
   const width = 1344;
   const heightPx = 768;
   const seed = Math.floor(Date.now() % 1000000);
   const model = process.env.POLLINATIONS_MODEL || 'flux';
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=${width}&height=${heightPx}&model=${encodeURIComponent(model)}&seed=${seed}&nologo=true&safe=true`;
-
   const response = await fetch(url, { method: 'GET', headers: { Accept: 'image/*' } });
   if (!response.ok) {
     const err = new Error(`Pollinations request failed with status ${response.status}.`);
     err.statusCode = response.status;
     throw err;
   }
-
   const image = await fetchBinaryAsDataUrl(response);
   return { image, provider: 'pollinations', providerLabel: PROVIDER_LABELS.pollinations, model };
 }
@@ -203,56 +160,21 @@ async function generateWithStability(body) {
     throw err;
   }
 
-  const {
-    originalImage,
-    conceptImage,
-    stabilityBaseImage,
-    editMask,
-    guideLock,
-    prompt,
-    productName,
-    category,
-    placementSummary,
-    color,
-    height,
-    postCtc,
-    topOption,
-    setsCount,
-  } = body || {};
-
-  const mode = process.env.STABILITY_MODE || 'edit-inpaint';
-  const outputFormat = process.env.STABILITY_OUTPUT_FORMAT || 'png';
-  const negativePrompt = process.env.STABILITY_NEGATIVE_PROMPT || 'people, cars, text, watermark, logo, different building, changed architecture, distorted fence, extra vegetation, fantasy scene, unrelated landscape, wooden fence, timber fence, brown fence, solid privacy fence, ranch fence, different product design';
-  const fullPrompt = buildFullPrompt({ prompt, productName, category, provider: 'stability', placementSummary, color, height, postCtc, topOption, setsCount });
-
-  let endpoint = 'https://api.stability.ai/v2beta/stable-image/edit/inpaint';
-  const form = new FormData();
-
-  if (mode === 'control-structure') {
-    if (!conceptImage || !prompt) {
-      const err = new Error('Missing conceptImage or prompt for Stability AI control structure generation.');
-      err.statusCode = 400;
-      throw err;
-    }
-    endpoint = 'https://api.stability.ai/v2beta/stable-image/control/structure';
-    appendImage(form, 'image', conceptImage, 'local-concept-structure.png');
-    form.append('control_strength', process.env.STABILITY_CONTROL_STRENGTH || '0.72');
-  } else {
-    const baseImage = stabilityBaseImage || conceptImage || originalImage;
-    if (!baseImage || !editMask || !prompt) {
-      const err = new Error('Missing base image, editMask, or prompt for Stability AI guide-lock generation.');
-      err.statusCode = 400;
-      throw err;
-    }
-    appendImage(form, 'image', baseImage, guideLock ? 'clean-local-guide-base.jpg' : 'original-site.jpg');
-    appendImage(form, 'mask', editMask, 'placement-mask.png');
-    endpoint = 'https://api.stability.ai/v2beta/stable-image/edit/inpaint';
-    if (process.env.STABILITY_INPAINT_SEED) form.append('seed', process.env.STABILITY_INPAINT_SEED);
+  const { originalImage, prompt, productName, category, color, height, references = [] } = body || {};
+  if (!originalImage) {
+    const err = new Error('Missing original site image for Stability generation.');
+    err.statusCode = 400;
+    throw err;
   }
 
+  const fullPrompt = buildFullPrompt({ prompt, productName, category, color, height, references, provider: 'stability' });
+  const endpoint = 'https://api.stability.ai/v2beta/stable-image/edit/search-and-replace';
+  const form = new FormData();
+  appendImage(form, 'image', originalImage, 'site-photo.jpg');
   form.append('prompt', fullPrompt);
-  form.append('output_format', outputFormat);
-  if (negativePrompt) form.append('negative_prompt', negativePrompt);
+  form.append('search_prompt', category === 'furniture' ? 'empty outdoor area or foreground ground area' : 'site frontage or open boundary edge');
+  form.append('output_format', process.env.STABILITY_OUTPUT_FORMAT || 'png');
+  form.append('negative_prompt', process.env.STABILITY_NEGATIVE_PROMPT || 'different building, text, watermark, unrelated scene, wooden fence if not requested, unrelated furniture');
 
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -274,29 +196,24 @@ async function generateWithStability(body) {
 
   if (!contentType.startsWith('image/')) {
     const data = await responseToJsonOrText(response);
-    const image = data?.image ? `data:image/${outputFormat};base64,${data.image}` : '';
+    const image = data?.image ? `data:image/png;base64,${data.image}` : '';
     if (!image) {
       const err = new Error('Stability AI response did not contain an image.');
       err.statusCode = 502;
       err.details = data;
       throw err;
     }
-    return { image, provider: 'stability', providerLabel: PROVIDER_LABELS.stability, model: mode };
+    return { image, provider: 'stability', providerLabel: PROVIDER_LABELS.stability, model: 'search-and-replace' };
   }
 
   const image = await fetchBinaryAsDataUrl(response);
-  return { image, provider: 'stability', providerLabel: PROVIDER_LABELS.stability, model: mode };
-}
-
-async function scaffoldProvider(provider, envName) {
-  if (!process.env[envName]) {
-    const err = new Error(`${envName} is not configured on the server.`);
-    err.statusCode = 500;
-    throw err;
-  }
-  const err = new Error(`${PROVIDER_LABELS[provider]} is scaffolded. Connection plumbing is ready, but final generation endpoint/model mapping still needs to be implemented.`);
-  err.statusCode = 501;
-  throw err;
+  return {
+    image,
+    provider: 'stability',
+    providerLabel: PROVIDER_LABELS.stability,
+    model: 'search-and-replace',
+    note: 'Stability AI simple reference mode is experimental. OpenAI is recommended when you want the uploaded product reference images to strongly drive the result.',
+  };
 }
 
 export default async function handler(req, res) {
@@ -307,15 +224,15 @@ export default async function handler(req, res) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    const provider = body?.provider || process.env.DEFAULT_AI_PROVIDER || 'stability';
+    const provider = body?.provider || 'openai';
 
     if (provider === 'local-preview') {
       return res.status(200).json({
-        image: body?.conceptImage || body?.originalImage,
+        image: body?.originalImage || '',
         provider,
         providerLabel: PROVIDER_LABELS[provider],
         model: 'local-preview',
-        note: 'No external provider was used.',
+        note: 'No external AI call was made. This mode only returns the uploaded site image.',
       });
     }
 
@@ -324,17 +241,11 @@ export default async function handler(req, res) {
       case 'openai':
         result = await generateWithOpenAI(body);
         break;
-      case 'pollinations':
-        result = await generateWithPollinations(body);
-        break;
       case 'stability':
         result = await generateWithStability(body);
         break;
-      case 'replicate':
-        result = await scaffoldProvider('replicate', 'REPLICATE_API_TOKEN');
-        break;
-      case 'huggingface':
-        result = await scaffoldProvider('huggingface', 'HUGGINGFACE_API_KEY');
+      case 'pollinations':
+        result = await generateWithPollinations(body);
         break;
       default: {
         const err = new Error(`Unsupported provider: ${provider}`);
