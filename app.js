@@ -277,7 +277,7 @@ const PROVIDER_INFO = {
   },
   stability: {
     label: 'Stability AI',
-    help: 'Connected in v0.5.5 using Stability AI preserve-site inpaint workflow. The original site photo is sent as the base image and a generated edit mask limits changes to the intended fence or furniture zone, improving scene preservation versus the older control-structure test.',
+    help: 'Connected in v0.5.6 using Stability AI guide-lock workflow. The clean local preview is used as the Stability base image, and after the API returns the selected product overlay is locked back on top so the final view respects the locally generated fence/furniture reference.',
   },
   replicate: {
     label: 'Replicate',
@@ -1204,6 +1204,52 @@ function renderOriginalImageDataUrl(quality = 0.9) {
   return canvas.toDataURL('image/jpeg', quality);
 }
 
+function renderCleanConceptFromCurrentResult(quality = 0.9) {
+  const canvas = createOffscreenCanvas();
+  const context = canvas.getContext('2d');
+  context.drawImage(el.resultCanvas, 0, 0);
+
+  // Remove the UI label from the generated guide before sending it to Stability.
+  // The local guide must look like a product mock-up, not a UI screenshot.
+  if (state.siteImage) {
+    const rect = fitImageRect(state.siteImage, canvas);
+    context.save();
+    context.beginPath();
+    context.rect(rect.x + 8, rect.y + 8, Math.min(460, rect.width * 0.65), 66);
+    context.clip();
+    drawBaseImage(context, canvas, state.siteImage);
+    context.restore();
+  }
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
+function waitForLocalPreviewPaint(ms = 450) {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
+}
+
+function drawLocalGuideOverlayOnCanvas(context, canvas, product) {
+  if (!state.siteImage || !product) return;
+  const rect = fitImageRect(state.siteImage, canvas);
+  if (!rect) return;
+
+  if (state.selectedCategory === 'fence') {
+    if (state.pathPoints.length < 2) autoPath(false);
+    const path = state.pathPoints.length >= 2 ? getFencePathForCanvas(canvas) : [
+      { x: rect.x + rect.width * 0.04, y: rect.y + rect.height * 0.86 },
+      { x: rect.x + rect.width * 0.50, y: rect.y + rect.height * 0.79 },
+      { x: rect.x + rect.width * 0.96, y: rect.y + rect.height * 0.73 },
+    ];
+    const data = getPerspectiveData(rect);
+    drawFenceGuidedOverlay(context, path, product, colorNameToHex(el.colorSelect.value), data);
+  } else {
+    syncFurnitureDots();
+    getFurniturePositionsForCanvas(canvas).forEach(point => {
+      const box = getFurnitureBox(point, rect, Number(el.furnitureScale.value));
+      drawFurnitureImageAt(context, product, box, true);
+    });
+  }
+}
+
 function drawFenceMaskOverlay(context, path, data) {
   const rails = samplePath(path, 72);
   if (!rails.length) return;
@@ -1329,11 +1375,13 @@ async function generateAiRefinement() {
     return;
   }
 
+  const provider = getSelectedProvider();
+
   // Always generate the controlled local base first. This gives any provider a clear placement guide.
   generateConcept();
   if (!state.resultReady) return;
+  await waitForLocalPreviewPaint(provider === 'stability' ? 650 : 350);
 
-  const provider = getSelectedProvider();
   if (provider === 'local-preview') {
     el.generateStatus.textContent = 'Local preview generated. Select another provider when you are ready to test a live API.';
     return;
@@ -1341,7 +1389,7 @@ async function generateAiRefinement() {
 
   el.generateAiBtn.disabled = true;
   el.generateStatus.textContent = provider === 'stability'
-    ? 'Sending original image, generated edit mask, and prompt to Stability AI preserve-site workflow...'
+    ? 'Sending clean local guide, edit mask, and prompt to Stability AI guide-lock workflow...'
     : `Sending original image, placement preview, and prompt to ${PROVIDER_INFO[provider]?.label || provider}...`;
 
   try {
@@ -1349,7 +1397,9 @@ async function generateAiRefinement() {
       provider,
       originalImage: renderOriginalImageDataUrl(0.9),
       conceptImage: canvasToCompressedDataUrl(el.resultCanvas, 0.88),
+      stabilityBaseImage: provider === 'stability' ? renderCleanConceptFromCurrentResult(0.92) : '',
       editMask: renderEditMaskDataUrl(),
+      guideLock: provider === 'stability',
       prompt: el.generatedPrompt.value,
       productName: product.name,
       category: state.selectedCategory,
@@ -1384,11 +1434,16 @@ async function generateAiRefinement() {
       const x = (el.resultCanvas.width - width) / 2;
       const y = (el.resultCanvas.height - height) / 2;
       resultCtx.drawImage(aiImage, x, y, width, height);
+      if (provider === 'stability') {
+        drawLocalGuideOverlayOnCanvas(resultCtx, el.resultCanvas, product);
+      }
       state.resultReady = true;
       el.resultSection.classList.remove('hidden');
       el.downloadBtn.disabled = false;
       const providerLabel = data.providerLabel || PROVIDER_INFO[provider]?.label || provider;
-      el.generateStatus.textContent = `AI refinement generated successfully via ${providerLabel}.`;
+      el.generateStatus.textContent = provider === 'stability'
+        ? `AI refinement generated via ${providerLabel}; local product guide locked back onto the result.`
+        : `AI refinement generated successfully via ${providerLabel}.`;
     };
     aiImage.src = data.image;
   } catch (error) {
@@ -1441,7 +1496,7 @@ function generateConcept() {
 function downloadResult() {
   if (!state.resultReady) return;
   const a = document.createElement('a');
-  a.download = `a1-visualization-studio-v0-5-5-${new Date().toISOString().slice(0,19).replace(/[:T]/g, '-')}.png`;
+  a.download = `a1-visualization-studio-v0-5-6-${new Date().toISOString().slice(0,19).replace(/[:T]/g, '-')}.png`;
   a.href = el.resultCanvas.toDataURL('image/png');
   a.click();
 }

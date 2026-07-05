@@ -1,97 +1,76 @@
-# A-1 Visualization Studio v0.5.5 — Stability Preserve-Site Trial
+# A-1 Visualization Studio v0.5.6 — Stability Guide-Lock Trial
 
-This build changes the Stability workflow so the AI no longer treats the concept preview as a loose scene-generation guide.
+This build responds to the v0.5.5 issue where Stability preserved the site better, but still ignored the locally generated fence/furniture reference and sometimes generated the wrong product style.
 
-## What changed in v0.5.5
+## What changed in v0.5.6
 
-### Stability AI now uses a preserve-site edit flow
-- The Stability provider now defaults to:
-  - `https://api.stability.ai/v2beta/stable-image/edit/inpaint`
-- The app sends:
-  - the **original site image** as the base photo
-  - an automatically generated **edit mask** covering only the intended fence/furniture zone
-  - a richer prompt with placement summary and selected product settings
-- This is designed to preserve:
-  - the building
-  - road / ground plane
-  - sky / background
-  - camera angle and scene perspective
+### Stability now uses a guide-lock workflow
+Instead of sending only the original site image as the Stability base image, the app now sends a **clean local concept guide** as the base image.
 
-### Automatic edit-mask generation added
-- For **fence** mode, the app builds a white mask strip along the chosen fence path and post height band.
-- For **furniture** mode, the app builds white mask blocks around each placed furniture set.
-- Black areas remain protected from editing.
+That clean guide is made from the local preview but removes the UI label before sending it to Stability.
 
-### Stability messaging updated
-- Provider label now shows **Stability AI (preserve site / inpaint)**.
-- `/api/health` reports v0.5.5 and indicates the current Stability mode.
-- `/api/test-provider` confirms the preserve-site workflow.
+### Local reference is locked back onto the result
+After the Stability result returns, the app redraws the selected local fence/furniture guide over the AI output.
 
-## Provider behavior in v0.5.5
+This prevents the final preview from drifting into unrelated outputs such as:
+- wooden fence
+- solid privacy fence
+- ranch fence
+- wrong product design
+- wrong color
 
-| Provider | Status | Notes |
-|---|---|---|
-| Local preview only | Ready | No API cost. Validates placement and product logic. |
-| Pollinations | Ready | Free workflow test only. Output may not preserve the uploaded image. |
-| Stability AI | Wired | Uses original site image + generated edit mask for better preservation. |
-| OpenAI | Wired if key exists | Still available as an alternate image-edit route. |
-| Replicate | Scaffolded | Token detection only. |
-| Hugging Face | Scaffolded | Key detection only. |
+### Stability still uses inpaint
+The Stability provider still uses:
 
-## Required Vercel environment variable
+```text
+/v2beta/stable-image/edit/inpaint
+```
+
+But now the base image is the clean local concept, not only the original site photo.
+
+## Why this version is needed
+
+v0.5.4 used Control Structure and changed the whole scene.
+v0.5.5 used original-photo inpaint and preserved the scene, but ignored the local fence reference.
+v0.5.6 combines both ideas:
+
+1. use the local preview as the base visual guide
+2. use masking to constrain the edit region
+3. lock the selected product overlay back onto the final result
+
+## Required Vercel environment variables
 
 ```env
 STABILITY_API_KEY=your_stability_api_key_here
-```
-
-## Recommended environment variables
-
-```env
-DEFAULT_AI_PROVIDER=stability
 STABILITY_MODE=edit-inpaint
 STABILITY_OUTPUT_FORMAT=png
-STABILITY_NEGATIVE_PROMPT=people, cars, text, watermark, logo, deformed fence, wrong building, distorted architecture, unrealistic shadows, extra products, extra landscaping
 ```
 
-Optional fallback mode:
+Recommended negative prompt:
 
 ```env
-STABILITY_MODE=control-structure
-STABILITY_CONTROL_STRENGTH=0.72
+STABILITY_NEGATIVE_PROMPT=people, cars, text, watermark, logo, deformed fence, wrong building, distorted architecture, unrealistic shadows, extra products, extra landscaping, wooden fence, timber fence, brown fence, solid privacy fence, ranch fence, different product design
 ```
 
 ## How to test
 
-1. Upload a site image.
-2. Select a fence or furniture product.
-3. Use the default placement or manual placement tools.
-4. Click **Generate local preview**.
-5. Choose **Stability AI (preserve site / inpaint)**.
-6. Click **Test API connection**.
-7. Click **Generate AI refinement**.
+1. Upload site image.
+2. Select fence/furniture product.
+3. Generate local preview and check that the local preview is correct.
+4. Choose **Stability AI (guide-lock / inpaint)**.
+5. Click **Test API connection**.
+6. Click **Generate AI refinement**.
 
-## Expected improvement over v0.5.4
+## Expected result
 
-Compared to the old control-structure route, v0.5.5 should:
-- preserve the original site scene better
-- reduce full-scene reinvention
-- focus AI edits only near the fence / furniture zone
-
-## Important note
-
-This is still a trial build. If output quality still needs improvement, the next tuning options are:
-- refine mask size and softness
-- tighten prompt language further
-- add product-specific mask logic
-- add a clean guide image without labels for future hybrid workflows
-- test an OpenAI + Stability comparison mode
+The final result should stay much closer to the locally generated preview. It may still need realism improvements, but it should no longer completely replace the selected fence with an unrelated wooden or solid fence.
 
 ## Files changed
 
-- `api/generate-image.js`
-- `api/test-provider.js`
-- `api/health.js`
-- `index.html`
 - `app.js`
+- `api/generate-image.js`
+- `api/health.js`
+- `api/test-provider.js`
+- `index.html`
 - `.env.example`
 - `README.md`

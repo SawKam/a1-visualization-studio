@@ -60,7 +60,7 @@ function buildFullPrompt({
     providerNote = 'Important: this provider is a trial text-to-image route and may not perfectly preserve the original uploaded site photo or the exact product geometry. Still aim to match the controlled concept and product intent as closely as possible.';
   }
   if (provider === 'stability') {
-    providerNote = 'Use the original site photograph as the base image. Preserve every unmasked part of the scene: building, sky, road, pavement, landscaping, camera angle, and perspective. Edit only the masked placement region and turn it into a realistic product visualization.';
+    providerNote = 'Use the supplied base image as the main composition reference. It already contains the approved local product placement guide. Keep the same camera angle, site, building, road, sky, perspective, product path, product color, and approximate product geometry. Do not replace the selected fence/furniture with a different material or design. Improve blending and realism only inside the masked zone.';
   }
 
   const metadataLines = [
@@ -206,7 +206,9 @@ async function generateWithStability(body) {
   const {
     originalImage,
     conceptImage,
+    stabilityBaseImage,
     editMask,
+    guideLock,
     prompt,
     productName,
     category,
@@ -220,7 +222,7 @@ async function generateWithStability(body) {
 
   const mode = process.env.STABILITY_MODE || 'edit-inpaint';
   const outputFormat = process.env.STABILITY_OUTPUT_FORMAT || 'png';
-  const negativePrompt = process.env.STABILITY_NEGATIVE_PROMPT || 'people, cars, text, watermark, logo, different building, changed architecture, distorted fence, extra vegetation, fantasy scene, unrelated landscape';
+  const negativePrompt = process.env.STABILITY_NEGATIVE_PROMPT || 'people, cars, text, watermark, logo, different building, changed architecture, distorted fence, extra vegetation, fantasy scene, unrelated landscape, wooden fence, timber fence, brown fence, solid privacy fence, ranch fence, different product design';
   const fullPrompt = buildFullPrompt({ prompt, productName, category, provider: 'stability', placementSummary, color, height, postCtc, topOption, setsCount });
 
   let endpoint = 'https://api.stability.ai/v2beta/stable-image/edit/inpaint';
@@ -236,12 +238,13 @@ async function generateWithStability(body) {
     appendImage(form, 'image', conceptImage, 'local-concept-structure.png');
     form.append('control_strength', process.env.STABILITY_CONTROL_STRENGTH || '0.72');
   } else {
-    if (!originalImage || !editMask || !prompt) {
-      const err = new Error('Missing originalImage, editMask, or prompt for Stability AI preserve-site generation.');
+    const baseImage = stabilityBaseImage || conceptImage || originalImage;
+    if (!baseImage || !editMask || !prompt) {
+      const err = new Error('Missing base image, editMask, or prompt for Stability AI guide-lock generation.');
       err.statusCode = 400;
       throw err;
     }
-    appendImage(form, 'image', originalImage, 'original-site.jpg');
+    appendImage(form, 'image', baseImage, guideLock ? 'clean-local-guide-base.jpg' : 'original-site.jpg');
     appendImage(form, 'mask', editMask, 'placement-mask.png');
     endpoint = 'https://api.stability.ai/v2beta/stable-image/edit/inpaint';
     if (process.env.STABILITY_INPAINT_SEED) form.append('seed', process.env.STABILITY_INPAINT_SEED);
