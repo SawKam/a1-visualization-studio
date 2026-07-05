@@ -1,6 +1,6 @@
 {
-  "name": "a1-visualization-studio-simple-reference",
-  "version": "0.6.2",
+  "name": "a1-visualization-studio-internal-trial-ready",
+  "version": "0.6.3",
   "private": true,
   "type": "module",
   "scripts": {

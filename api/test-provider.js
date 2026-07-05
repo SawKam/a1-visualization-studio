@@ -30,7 +30,7 @@ async function testStabilityKey() {
       ok: true,
       provider: 'stability',
       ready: true,
-      message: 'Stability key validated. This simplified mode remains experimental and is prompt-led.',
+      message: 'Stability key validated. Use as experimental only.',
       balance: data?.credits ?? data?.balance ?? data,
     },
   };
@@ -55,14 +55,14 @@ export default async function handler(req, res) {
       const testUrl = 'https://image.pollinations.ai/prompt/hello?width=64&height=64&seed=1&nologo=true';
       const response = await fetch(testUrl, { method: 'GET', headers: { Accept: 'image/*' } });
       if (!response.ok) return res.status(502).json({ ok: false, provider, ready: false, error: `Pollinations endpoint returned ${response.status}.` });
-      return res.status(200).json({ ok: true, provider, ready: true, message: 'Pollinations endpoint responded successfully.' });
+      return res.status(200).json({ ok: true, provider, ready: true, message: 'Pollinations endpoint responded. Developer test only.' });
     }
 
     if (provider === 'openai') {
       if (!process.env.OPENAI_API_KEY) {
         return res.status(500).json({ ok: false, provider, ready: false, error: 'OPENAI_API_KEY is not configured.' });
       }
-      return res.status(200).json({ ok: true, provider, ready: true, message: 'OpenAI key detected. Ready for direct multi-reference image generation.' });
+      return res.status(200).json({ ok: true, provider, ready: true, message: 'OpenAI key detected. Ready for internal trial generation.' });
     }
 
     if (provider === 'stability') {
