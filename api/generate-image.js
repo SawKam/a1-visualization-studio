@@ -60,7 +60,7 @@ function buildFullPrompt({
     providerNote = 'Important: this provider is a trial text-to-image route and may not perfectly preserve the original uploaded site photo or the exact product geometry. Still aim to match the controlled concept and product intent as closely as possible.';
   }
   if (provider === 'stability') {
-    providerNote = 'Use the supplied base image as the main composition reference. It already contains the approved local product placement guide. Keep the same camera angle, site, building, road, sky, perspective, product path, product color, and approximate product geometry. Do not replace the selected fence/furniture with a different material or design. Improve blending and realism only inside the masked zone.';
+    providerNote = 'Use the supplied base image as the main composition reference. The database product references are authoritative for product identity, while the local preview is the placement guide. Keep the same camera angle, site, building, road, sky, perspective, product path, product color, and approximate product geometry. Do not replace the selected fence or furniture with a different material or design. Improve blending and realism only inside the masked zone.';
   }
 
   const metadataLines = [
@@ -79,9 +79,9 @@ function buildFullPrompt({
     'Use image 1 as the original site photograph.',
     provider === 'stability'
       ? 'For Stability AI, respect the edit mask and only change the intended product placement zone.'
-      : 'Use image 2 as the controlled placement guide showing where the selected product should appear.',
+      : 'Use image 2 as the controlled placement guide showing where the selected product should appear. Additional attached product reference images, when present, are the authoritative product source.',
     providerNote,
-    'Replace any rough overlay with a realistic product visualization. Keep product geometry and color faithful to the approved reference and placement intent.',
+    'Replace any rough overlay with a realistic product visualization. Keep product geometry and color faithful to the approved database references and placement intent.',
     ...metadataLines,
     'Do not add text labels, watermarks, people, extra vehicles, extra landscapes, or unrelated objects.',
     'Do not replace the factory/building/site with a different scene.',

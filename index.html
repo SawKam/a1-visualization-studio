@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>A-1 Visualization Studio — v0.5.8</title>
+  <title>A-1 Visualization Studio — v0.5.9</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <div class="brand-block">
-        <div class="eyebrow">Deployable UI direction · Database Raster Reference Fix v0.5.8</div>
+        <div class="eyebrow">Deployable UI direction · Reference-Grounded AI Blend v0.5.9</div>
         <h1>A-1 Visualization Studio</h1>
         <p>Guided customer visualizer with hidden admin-managed library for fence systems and Meshable outdoor furniture.</p>
       </div>
@@ -179,7 +179,7 @@
           <div class="provider-panel">
             <div class="provider-panel-head">
               <div>
-                <div class="subhead">v0.5.8 database raster reference fix</div>
+                <div class="subhead">v0.5.9 reference-grounded ai blend</div>
                 <p>Switch providers without rebuilding the UI. Use local preview only, or test public / paid providers through the same backend contract.</p>
               </div>
               <div id="providerTestStatus" class="mini-status">Select a provider and test connection.</div>
@@ -191,7 +191,7 @@
                   <option value="local-preview">Local preview only</option>
                   <option value="pollinations">Pollinations (free trial style)</option>
                   <option value="openai">OpenAI</option>
-                  <option value="stability">Stability AI (product-reference lock)</option>
+                  <option value="stability">Stability AI (reference-grounded blend)</option>
                   <option value="replicate">Replicate (scaffold)</option>
                   <option value="huggingface">Hugging Face (scaffold)</option>
                 </select>
@@ -203,6 +203,47 @@
             </div>
             <div id="providerBadges" class="provider-badges"></div>
             <div id="providerHelp" class="api-note">Local preview only uses no external API credits. Choose another provider to try an actual server-side image call.</div>
+
+          <div class="reference-grounded-panel">
+            <div class="provider-panel-head">
+              <div>
+                <div class="subhead">v0.5.9 reference-grounded AI blend</div>
+                <p>The database product is the source of truth. The local preview is the placement guide. The AI API should refine realism, not redesign the product.</p>
+              </div>
+              <div id="bundleSummaryBadge" class="mini-status">Waiting for product selection.</div>
+            </div>
+
+            <div class="bundle-grid">
+              <label>
+                Blend mode
+                <select id="blendModeSelect">
+                  <option value="strict" selected>Strict product lock</option>
+                  <option value="balanced">Balanced realism</option>
+                  <option value="creative">Creative realism</option>
+                </select>
+              </label>
+              <label class="check-row"><input id="includePlacementGuideChk" type="checkbox" checked /> Include local preview as placement guide</label>
+              <label class="check-row"><input id="includeFrontRefChk" type="checkbox" checked /> Include front / clean database reference</label>
+              <label class="check-row"><input id="includePerspectiveRefChk" type="checkbox" checked /> Include perspective / lifestyle database reference</label>
+              <label class="check-row"><input id="includeSecondaryRefChk" type="checkbox" checked /> Include side / top / secondary references when available</label>
+            </div>
+
+            <div class="bundle-preview-grid">
+              <div class="bundle-preview-card">
+                <span>Front / clean reference</span>
+                <div class="bundle-thumb"><img id="bundleFrontImg" alt="Front reference" /><div id="bundleFrontEmpty" class="reference-empty">No front reference</div></div>
+              </div>
+              <div class="bundle-preview-card">
+                <span>Perspective / lifestyle</span>
+                <div class="bundle-thumb"><img id="bundlePerspectiveImg" alt="Perspective reference" /><div id="bundlePerspectiveEmpty" class="reference-empty">No perspective reference</div></div>
+              </div>
+              <div class="bundle-preview-card">
+                <span>Secondary reference</span>
+                <div class="bundle-thumb"><img id="bundleSecondaryImg" alt="Secondary reference" /><div id="bundleSecondaryEmpty" class="reference-empty">No side/top/site reference</div></div>
+              </div>
+            </div>
+
+            <div id="bundleSummary" class="api-note">This pack will be sent as: site photo + selected product references + local placement guide + metadata prompt.</div>
           </div>
 
           <div id="resultSection" class="result-area hidden">
@@ -338,6 +379,15 @@
             <div id="designerEmpty" class="canvas-empty">Upload a site image first.</div>
           </div>
           <aside class="designer-sidebar">
+            <div class="designer-reference-card">
+              <div class="subhead">Selected database reference</div>
+              <div class="designer-reference-thumb">
+                <img id="designerReferencePreview" alt="Designer reference preview" />
+                <div id="designerReferenceEmpty" class="reference-empty">Reference image will appear here.</div>
+              </div>
+              <strong id="designerReferenceName">No product selected</strong>
+              <p id="designerReferenceStatus" class="helper-text">The manual placement tool should use the approved product from the admin database.</p>
+            </div>
             <div id="fenceDesignerControls">
               <div class="subhead">Fence controls</div>
               <div class="toolbar-row">

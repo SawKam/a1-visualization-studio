@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'a1_visualization_studio_library_v058';
+const STORAGE_KEY = 'a1_visualization_studio_library_v059';
 
 function svgDataUri(svg) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
@@ -143,6 +143,7 @@ const state = {
   modalOpenFor: 'fence',
   selectedProvider: 'local-preview',
   providerHealth: null,
+  blendMode: 'strict',
 };
 
 const el = {
@@ -198,6 +199,19 @@ const el = {
   providerBadges: document.getElementById('providerBadges'),
   providerHelp: document.getElementById('providerHelp'),
   providerTestStatus: document.getElementById('providerTestStatus'),
+  blendModeSelect: document.getElementById('blendModeSelect'),
+  includePlacementGuideChk: document.getElementById('includePlacementGuideChk'),
+  includeFrontRefChk: document.getElementById('includeFrontRefChk'),
+  includePerspectiveRefChk: document.getElementById('includePerspectiveRefChk'),
+  includeSecondaryRefChk: document.getElementById('includeSecondaryRefChk'),
+  bundleSummaryBadge: document.getElementById('bundleSummaryBadge'),
+  bundleSummary: document.getElementById('bundleSummary'),
+  bundleFrontImg: document.getElementById('bundleFrontImg'),
+  bundlePerspectiveImg: document.getElementById('bundlePerspectiveImg'),
+  bundleSecondaryImg: document.getElementById('bundleSecondaryImg'),
+  bundleFrontEmpty: document.getElementById('bundleFrontEmpty'),
+  bundlePerspectiveEmpty: document.getElementById('bundlePerspectiveEmpty'),
+  bundleSecondaryEmpty: document.getElementById('bundleSecondaryEmpty'),
   resultSection: document.getElementById('resultSection'),
   resultGrid: document.getElementById('resultGrid'),
   originalCanvas: document.getElementById('originalCanvas'),
@@ -232,6 +246,10 @@ const el = {
   designerEyebrow: document.getElementById('designerEyebrow'),
   designerTitle: document.getElementById('designerTitle'),
   designerDescription: document.getElementById('designerDescription'),
+  designerReferencePreview: document.getElementById('designerReferencePreview'),
+  designerReferenceEmpty: document.getElementById('designerReferenceEmpty'),
+  designerReferenceName: document.getElementById('designerReferenceName'),
+  designerReferenceStatus: document.getElementById('designerReferenceStatus'),
   designerCanvas: document.getElementById('designerCanvas'),
   designerEmpty: document.getElementById('designerEmpty'),
   autoPathBtn: document.getElementById('autoPathBtn'),
@@ -307,11 +325,11 @@ const PROVIDER_INFO = {
   },
   openai: {
     label: 'OpenAI',
-    help: 'Best current route in this build for image refinement using the original site image, the local concept guide, and product references together. Requires OPENAI_API_KEY on the server.',
+    help: 'Best current route in this build for reference-grounded editing using the original site image, the local placement guide, and database product references together. Requires OPENAI_API_KEY on the server.',
   },
   stability: {
     label: 'Stability AI',
-    help: 'Connected in v0.5.8 using the database raster reference fix workflow. Local previews now wait for selected database reference images to load, and aesthetic fence references are drawn as full product strips instead of being replaced by the generic mesh overlay.',
+    help: 'Connected in v0.5.9 using the database raster reference fix workflow. Local previews now wait for selected database reference images to load, and aesthetic fence references are drawn as full product strips instead of being replaced by the generic mesh overlay.',
   },
   replicate: {
     label: 'Replicate',
@@ -489,7 +507,7 @@ function updatePrompt() {
     lines.push(`Post CTC: ${el.ctcSelect.value}.`);
     lines.push(`Top option: ${el.topOptionSelect.value}.`);
     if (state.pathPoints.length >= 2) lines.push(`Use the manually defined fence path and perspective guide.`);
-    lines.push(`Use the hidden admin reference library and preserve post rhythm, panel character, scale, and perspective.`);
+    lines.push(`Use the hidden admin database product as the authoritative fence reference. The local preview or manual path is the placement guide only. Preserve post rhythm, panel character, motif fidelity, scale, and perspective.`);
   } else {
     lines.push(`Product family: Meshable Outdoor Furniture.`);
     lines.push(`Approved product: ${product.name}.`);
@@ -498,7 +516,7 @@ function updatePrompt() {
     lines.push(`Number of sets: ${el.setsCountSelect.value}.`);
     lines.push(`Scale setting: ${el.furnitureScale.value}%.`);
     if (state.furniturePositions.length) lines.push(`Use the manually placed furniture dots as the layout guide.`);
-    lines.push(`Use the hidden admin multi-view references and preserve product geometry, realistic ground contact, and scene fit.`);
+    lines.push(`Use the hidden admin database product as the authoritative furniture reference. The local preview or manual dots are the placement guide only. Preserve product geometry, realistic ground contact, and scene fit.`);
   }
   if (el.customPrompt.value.trim()) lines.push(`User additional instruction: ${el.customPrompt.value.trim()}`);
   if (product.notes) lines.push(`Admin guidance: ${product.notes}`);
@@ -872,7 +890,7 @@ function drawFenceGuidedOverlay(context, path, product, color, data) {
   const referenceImage = getReferenceImage(product);
   const drewReference = referenceImage ? drawReferencePanels(context, posts, referenceImage, data, color, path, product) : false;
 
-  // Critical v0.5.8 change:
+  // Critical v0.5.9 change:
   // If a product reference exists, the local renderer must respect it first.
   // The old build drew a generic mesh overlay on top of every product, which made
   // aesthetic fences look like plain 358-style mesh. Generic mesh is now only a fallback.
@@ -901,7 +919,7 @@ function shouldTintReferenceImage(product, src) {
   if (!product) return false;
   const source = String(src || '').toLowerCase();
   // Do not tint real PNG/JPEG database references. Tinting a raster reference was the
-  // reason aesthetic panels became a solid green rectangle in v0.5.8. Only tint the
+  // reason aesthetic panels became a solid green rectangle in v0.5.9. Only tint the
   // procedural SVG placeholders where the product is deliberately stored as a mask.
   if (isAestheticFence(product)) return false;
   return source.startsWith('data:image/svg') && product.category === 'fence';
@@ -1290,14 +1308,28 @@ function canvasToCompressedDataUrl(canvas, quality = 0.86) {
   return canvas.toDataURL('image/jpeg', quality);
 }
 
-function getProductReferencePayload(product) {
+async function imageSourceToDataUrl(src) {
+  if (!isImageReference(src)) return '';
+  if (String(src).startsWith('data:image/')) return src;
+  const img = await loadImageCached(src);
+  if (!img) return '';
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth || img.width;
+  canvas.height = img.naturalHeight || img.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  return canvas.toDataURL('image/png');
+}
+
+async function getProductReferencePayload(product) {
   const refs = [];
-  ['referenceImage', 'sideImage', 'topImage', 'perspectiveImage', 'siteImage'].forEach((key) => {
-    if (product && product[key] && String(product[key]).startsWith('data:image/')) {
-      refs.push({ label: key, image: product[key] });
+  for (const key of ['referenceImage', 'perspectiveImage', 'sideImage', 'topImage', 'siteImage']) {
+    if (product && product[key]) {
+      const image = await imageSourceToDataUrl(product[key]);
+      if (image) refs.push({ label: key, image });
     }
-  });
-  return refs.slice(0, 3);
+  }
+  return refs.slice(0, 4);
 }
 
 function createOffscreenCanvas(width = el.resultCanvas.width, height = el.resultCanvas.height) {
@@ -1499,8 +1531,8 @@ async function generateAiRefinement() {
 
   el.generateAiBtn.disabled = true;
   el.generateStatus.textContent = provider === 'stability'
-    ? 'Sending clean local guide, edit mask, and prompt to Stability AI guide-lock workflow...'
-    : `Sending original image, placement preview, and prompt to ${PROVIDER_INFO[provider]?.label || provider}...`;
+    ? 'Preparing site image, database product references, local placement guide, and edit mask for Stability AI reference-grounded blend...'
+    : `Preparing site image, database product references, and local placement guide for ${PROVIDER_INFO[provider]?.label || provider}...`;
 
   try {
     const payload = {
@@ -1510,10 +1542,12 @@ async function generateAiRefinement() {
       stabilityBaseImage: provider === 'stability' ? renderCleanConceptFromCurrentResult(0.92) : '',
       editMask: renderEditMaskDataUrl(),
       guideLock: provider === 'stability',
+      includePlacementGuide: el.includePlacementGuideChk?.checked !== false,
+      blendMode: el.blendModeSelect?.value || 'strict',
       prompt: el.generatedPrompt.value,
       productName: product.name,
       category: state.selectedCategory,
-      references: getProductReferencePayload(product),
+      references: await getProductReferencePayload(product),
       placementSummary: buildPlacementSummary(),
       color: el.colorSelect.value,
       height: state.selectedCategory === 'fence' ? el.heightSelect.value : '',
@@ -1552,8 +1586,8 @@ async function generateAiRefinement() {
       el.downloadBtn.disabled = false;
       const providerLabel = data.providerLabel || PROVIDER_INFO[provider]?.label || provider;
       el.generateStatus.textContent = provider === 'stability'
-        ? `AI refinement generated via ${providerLabel}; local product guide locked back onto the result.`
-        : `AI refinement generated successfully via ${providerLabel}.`;
+        ? `AI refinement generated via ${providerLabel}; database product references were packed with the request and the local product guide was locked back onto the result.`
+        : `AI refinement generated successfully via ${providerLabel} using the reference-grounded bundle.`;
     };
     aiImage.src = data.image;
   } catch (error) {
